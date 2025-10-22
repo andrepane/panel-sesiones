@@ -209,7 +209,13 @@
       otros_keywords: ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"]
     };
 
-    if(!cfg.rules || !cfg.rules.centros){ cfg.rules = DEFAULT_RULES; }
+    const DEFAULT_SESSION_REGEX = new RegExp(DEFAULT_RULES.pattern_sesion, 'i');
+
+    function cloneRules(rules){
+      return JSON.parse(JSON.stringify(rules));
+    }
+
+    if(!cfg.rules || !cfg.rules.centros){ cfg.rules = cloneRules(DEFAULT_RULES); }
 
     $('#cfg-minutes').value = cfg.minutesAvailable;
     $('#clientId').value = cfg.clientId;
@@ -289,14 +295,41 @@
       return null;
     }
 
-    function safeSessionRegex(){
-      const pattern = cfg.rules.pattern_sesion || DEFAULT_RULES.pattern_sesion;
-      try{
-        return new RegExp(pattern, 'i');
-      }catch(err){
-        console.warn('pattern_sesion inválido, usando defecto', err);
-        return new RegExp(DEFAULT_RULES.pattern_sesion, 'i');
+    const SESSION_REGEX_CACHE = { pattern: null, regex: DEFAULT_SESSION_REGEX };
+
+    function buildRegex(pattern){
+      const trimmed = pattern.trim();
+      if(!trimmed){
+        throw new Error('empty pattern');
       }
+      if(trimmed.startsWith('/') && trimmed.lastIndexOf('/') > 0){
+        const lastSlash = trimmed.lastIndexOf('/');
+        const source = trimmed.slice(1, lastSlash);
+        const flags = trimmed.slice(lastSlash + 1) || 'i';
+        const normalizedFlags = flags.includes('i') ? flags : flags + 'i';
+        return new RegExp(source, normalizedFlags);
+      }
+      return new RegExp(trimmed, 'i');
+    }
+
+    function safeSessionRegex(){
+      const pattern = typeof cfg.rules.pattern_sesion === 'string' ? cfg.rules.pattern_sesion : '';
+      if(pattern === SESSION_REGEX_CACHE.pattern && SESSION_REGEX_CACHE.regex){
+        return SESSION_REGEX_CACHE.regex;
+      }
+      if(pattern.trim()){
+        try{
+          const regex = buildRegex(pattern);
+          SESSION_REGEX_CACHE.pattern = pattern;
+          SESSION_REGEX_CACHE.regex = regex;
+          return regex;
+        }catch(err){
+          console.warn('pattern_sesion inválido, usando defecto', err);
+        }
+      }
+      SESSION_REGEX_CACHE.pattern = pattern;
+      SESSION_REGEX_CACHE.regex = DEFAULT_SESSION_REGEX;
+      return DEFAULT_SESSION_REGEX;
     }
 
     function sessionParse(ev){
@@ -491,8 +524,8 @@
     });
 
     $('#reset-rules').addEventListener('click', ()=>{
-      cfg.rules = DEFAULT_RULES;
-      $('#rules-json').textContent = JSON.stringify(DEFAULT_RULES, null, 2);
+      cfg.rules = cloneRules(DEFAULT_RULES);
+      $('#rules-json').textContent = JSON.stringify(cfg.rules, null, 2);
       localStorage.removeItem('rules');
       alert('Reglas restauradas. Recarga la semana para aplicar cambios.');
     });
