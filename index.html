@@ -105,6 +105,28 @@
           <div class="muted"><span id="minutes-label">– / – min</span></div>
           <div class="muted"><strong id="pct-label">0%</strong></div>
         </div>
+
+        <div style="border-top:1px solid #1b224a; margin:18px 0 12px"></div>
+        <div class="muted" style="font-weight:600; text-transform:uppercase; font-size:12px">Resumen mensual</div>
+        <div class="row" style="margin-top:12px" id="month-stats">
+          <div class="stat">
+            <div class="label">Sesiones mes</div>
+            <div class="value" id="stat-month-total">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">Dadas mes</div>
+            <div class="value" id="stat-month-dadas">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">Ausencias mes</div>
+            <div class="value" id="stat-month-ausencias">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">% dadas</div>
+            <div class="value" id="stat-month-pct">–</div>
+          </div>
+        </div>
+        <div class="muted" id="month-label">—</div>
       </section>
 
       <!-- Columna derecha: Configuración -->
@@ -145,15 +167,22 @@
     </div>
 
     <section class="card" style="margin-top:16px">
-      <div class="row" style="justify-content:space-between; align-items:end">
+      <div class="row" style="justify-content:space-between; align-items:end; flex-wrap:wrap; gap:12px">
         <div>
           <h3 style="margin:0">Eventos de la semana</h3>
           <div class="muted" id="range-label">—</div>
         </div>
-        <div class="row">
+        <div class="row" style="gap:8px; flex-wrap:wrap">
           <select id="calendar-select"></select>
           <button id="load-week">Cargar semana</button>
         </div>
+      </div>
+
+      <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:12px">
+        <button id="prev-week" class="btn-ghost" title="Semana anterior">◀</button>
+        <input id="week-picker" type="date" />
+        <button id="next-week" class="btn-ghost" title="Semana siguiente">▶</button>
+        <button id="today-week" class="btn-ghost">Semana actual</button>
       </div>
 
       <div style="overflow:auto; margin-top:8px">
@@ -181,6 +210,7 @@
     const TZ = 'Europe/Madrid';
     const fmtDate = (d)=> d.toLocaleDateString('es-ES', { timeZone: TZ });
     const fmtTime = (d)=> d.toLocaleTimeString('es-ES', { timeZone: TZ, hour:'2-digit', minute:'2-digit' });
+    const fmtMonthYear = (d)=> d.toLocaleDateString('es-ES', { timeZone: TZ, month: 'long', year: 'numeric' });
 
     function getWeekRange(baseDate=new Date()){
       const d = new Date(baseDate);
@@ -193,6 +223,16 @@
       return {start, end};
     }
 
+    function getMonthRange(baseDate=new Date()){
+      const d = new Date(baseDate);
+      d.setHours(0,0,0,0);
+      d.setDate(1);
+      const start = new Date(d);
+      const end = new Date(start);
+      end.setMonth(end.getMonth() + 1);
+      return {start, end};
+    }
+
     // ======== ESTADO Y PERSISTENCIA ========
     const $ = (sel)=> document.querySelector(sel);
     const cfg = {
@@ -200,6 +240,13 @@
       rules: JSON.parse(localStorage.getItem('rules') || '{}'),
       clientId: localStorage.getItem('clientId') || ''
     };
+
+    const weekPicker = $('#week-picker');
+    const monthTotalEl = $('#stat-month-total');
+    const monthDadasEl = $('#stat-month-dadas');
+    const monthAusenciasEl = $('#stat-month-ausencias');
+    const monthPctEl = $('#stat-month-pct');
+    const monthLabelEl = $('#month-label');
 
     const FALLBACK_SESSION_REGEX = /^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$/i;
 
@@ -220,6 +267,79 @@
       }
     })();
 
+    function formatDateInputValue(date){
+      const d = new Date(date);
+      if(Number.isNaN(d.getTime())) return '';
+      const offset = d.getTimezoneOffset();
+      const local = new Date(d.getTime() - offset * 60000);
+      return local.toISOString().slice(0, 10);
+    }
+
+    function parseDateInputValue(value){
+      if(!value) return null;
+      const parts = value.split('-').map(Number);
+      if(parts.length !== 3) return null;
+      const [year, month, day] = parts;
+      if(!year || !month || !day) return null;
+      return new Date(year, month - 1, day);
+    }
+
+    function formatMonthRangeText(range){
+      const end = new Date(range.end - 1);
+      return `Mes de ${fmtMonthYear(range.start)} (${fmtDate(range.start)} - ${fmtDate(end)})`;
+    }
+
+    let week = null;
+    let weekRequestToken = 0;
+    let monthSummaryToken = 0;
+
+    function updateWeekUI(){
+      if(!week) return;
+      const start = week.start;
+      const end = new Date(week.end - 1);
+      $('#week-label').textContent = `Del ${fmtDate(start)} al ${fmtDate(end)}`;
+      $('#range-label').textContent = `Consultando de ${fmtDate(start)} 00:00 a ${fmtDate(end)} 23:59 (${TZ})`;
+      if(weekPicker){ weekPicker.value = formatDateInputValue(start); }
+    }
+
+    function setWeekFromDate(baseDate){
+      if(!(baseDate instanceof Date) || Number.isNaN(baseDate.getTime())) return;
+      const newWeek = getWeekRange(baseDate);
+      if(week && week.start.getTime() === newWeek.start.getTime()){ // sin cambios reales
+        week = newWeek;
+        updateWeekUI();
+        return;
+      }
+      week = newWeek;
+      updateWeekUI();
+      monthSummaryToken++;
+      resetMonthSummary();
+      if(accessToken){ loadWeek(); }
+    }
+
+    function changeWeekBy(days){
+      if(!week) return;
+      const base = new Date(week.start);
+      base.setDate(base.getDate() + days);
+      setWeekFromDate(base);
+    }
+
+    function resetMonthSummary(text='—'){
+      monthTotalEl.textContent = '–';
+      monthDadasEl.textContent = '–';
+      monthAusenciasEl.textContent = '–';
+      monthPctEl.textContent = '–';
+      monthLabelEl.textContent = text;
+    }
+
+    function setMonthSummaryLoading(range){
+      monthTotalEl.textContent = '…';
+      monthDadasEl.textContent = '…';
+      monthAusenciasEl.textContent = '…';
+      monthPctEl.textContent = '…';
+      monthLabelEl.textContent = range ? `Cargando ${formatMonthRangeText(range)}...` : 'Cargando resumen mensual...';
+    }
+
     function cloneRules(rules){
       return JSON.parse(JSON.stringify(rules));
     }
@@ -230,9 +350,9 @@
     $('#clientId').value = cfg.clientId;
     $('#rules-json').textContent = JSON.stringify(cfg.rules, null, 2);
 
-    const week = getWeekRange();
-    $('#week-label').textContent = `Del ${fmtDate(week.start)} al ${fmtDate(new Date(week.end-1))}`;
-    $('#range-label').textContent = `Consultando de ${fmtDate(week.start)} 00:00 a ${fmtDate(new Date(week.end-1))} 23:59 (${TZ})`;
+    week = getWeekRange();
+    updateWeekUI();
+    resetMonthSummary();
 
     // ======== AUTH (GIS Token Client) ========
     let tokenClient = null; let accessToken = null; let calendars = [];
@@ -408,26 +528,80 @@
       return null;
     }
 
+    function renderMonthSummary(events, range){
+      let dadas = 0;
+      let ausencias = 0;
+
+      events.forEach(ev=>{
+        if(isExcluirTotal(ev)) return;
+        const sp = sessionParse(ev);
+        if(!sp) return;
+        if(sp.absent) ausencias++;
+        else dadas++;
+      });
+
+      const total = dadas + ausencias;
+      monthTotalEl.textContent = String(total);
+      monthDadasEl.textContent = String(dadas);
+      monthAusenciasEl.textContent = String(ausencias);
+      monthPctEl.textContent = total>0 ? `${Math.round((dadas/total)*100)}%` : '–';
+      monthLabelEl.textContent = formatMonthRangeText(range);
+    }
+
     // ======== CARGA DE EVENTOS ========
-    async function loadWeek(){
-      const calId = $('#calendar-select').value || 'primary';
+    async function fetchEventsForRange(calId, range){
       const params = new URLSearchParams({
         singleEvents: 'true', orderBy: 'startTime', timeZone: TZ,
-        timeMin: week.start.toISOString(), timeMax: week.end.toISOString(), maxResults: '2500'
+        timeMin: range.start.toISOString(), timeMax: range.end.toISOString(), maxResults: '2500'
       });
       const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?${params.toString()}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }});
+      if(!res.ok){
+        const msg = await res.text();
+        throw new Error(`Error cargando eventos (${res.status}): ${msg}`);
+      }
+      const data = await res.json();
+      return (data.items||[]).filter(e=> !e.status || e.status!=='cancelled');
+    }
+
+    async function loadMonthSummary(calId){
+      if(!week) return;
+      const monthRange = getMonthRange(week.start);
+      const token = ++monthSummaryToken;
+      setMonthSummaryLoading(monthRange);
       try{
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }});
-        if(!res.ok){
-          const msg = await res.text();
-          throw new Error(`Error cargando eventos (${res.status}): ${msg}`);
+        const events = await fetchEventsForRange(calId, monthRange);
+        if(token !== monthSummaryToken) return;
+        renderMonthSummary(events, monthRange);
+      }catch(err){
+        if(token === monthSummaryToken){
+          console.error(err);
+          resetMonthSummary('No se pudo cargar el resumen mensual.');
         }
-        const data = await res.json();
-        const events = (data.items||[]).filter(e=> !e.status || e.status!=='cancelled');
+      }
+    }
+
+    async function loadWeek(){
+      const calId = $('#calendar-select').value || 'primary';
+      monthSummaryToken++;
+      if(week){
+        setMonthSummaryLoading(getMonthRange(week.start));
+      }
+      const token = ++weekRequestToken;
+      try{
+        const events = await fetchEventsForRange(calId, week);
+        if(token !== weekRequestToken) return;
         render(events);
       }catch(err){
-        console.error(err);
-        alert('No se pudieron cargar los eventos. Revisa la consola para más detalles.');
+        if(token === weekRequestToken){
+          console.error(err);
+          alert('No se pudieron cargar los eventos de la semana. Revisa la consola para más detalles.');
+          resetMonthSummary();
+        }
+        return;
+      }
+      if(token === weekRequestToken){
+        loadMonthSummary(calId);
       }
     }
 
@@ -530,6 +704,14 @@
       }
     });
     $('#load-week').addEventListener('click', ()=>{ if(!accessToken) return alert('Conéctate primero'); loadWeek(); });
+    $('#prev-week')?.addEventListener('click', ()=> changeWeekBy(-7));
+    $('#next-week')?.addEventListener('click', ()=> changeWeekBy(7));
+    $('#today-week')?.addEventListener('click', ()=> setWeekFromDate(new Date()));
+    weekPicker?.addEventListener('change', (event)=>{
+      const value = event.target.value;
+      const date = parseDateInputValue(value);
+      if(date) setWeekFromDate(date);
+    });
 
     $('#save-cfg').addEventListener('click', ()=>{
       const m = Number($('#cfg-minutes').value||0);
