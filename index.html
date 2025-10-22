@@ -124,7 +124,7 @@
     "bormujos": ["(b)"],
     "privado": ["(p)"]
   },
-  "pattern_sesion": "/^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$/i",
+  "pattern_sesion": "^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$",
   "otros_excluir_totalmente": [
     "^g\s*:\s*\d+$", "^b\s*:\s*\d+$", "^ent\.\s*[bg]\s*:\s*\d+"
   ],
@@ -201,15 +201,24 @@
       clientId: localStorage.getItem('clientId') || ''
     };
 
+    const FALLBACK_SESSION_REGEX = /^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$/i;
+
     const DEFAULT_RULES = {
       centros: { gines:["(g)"], bormujos:["(b)"], privado:["(p)"] },
-      pattern_sesion: "^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$",
+      pattern_sesion: FALLBACK_SESSION_REGEX.source,
       otros_excluir_totalmente: ["^g\s*:\s*\d+$","^b\s*:\s*\d+$","^ent\.\s*[bg]\s*:\s*\d+"],
       bloques_horario: ["^[bg]\s*\d{1,2}$"],
       otros_keywords: ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"]
     };
 
-    const DEFAULT_SESSION_REGEX = new RegExp(DEFAULT_RULES.pattern_sesion, 'i');
+    const DEFAULT_SESSION_REGEX = (()=>{
+      try{
+        return buildRegex(DEFAULT_RULES.pattern_sesion);
+      }catch(err){
+        console.error('pattern_sesion por defecto inválido, usando comodín', err);
+        return FALLBACK_SESSION_REGEX;
+      }
+    })();
 
     function cloneRules(rules){
       return JSON.parse(JSON.stringify(rules));
