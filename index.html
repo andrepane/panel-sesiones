@@ -273,15 +273,28 @@
     function textFromEvent(ev){
       return [ev.summary||'', ev.location||'', (ev.description||'')].join(' ').toLowerCase().trim();
     }
-    function matchesPattern(text, pattern){
-      if(!pattern) return false;
-      const normalized = (text||'').toLowerCase();
+    const REGEX_CACHE = new Map();
+
+    function compilePattern(pattern){
+      const key = String(pattern ?? '');
+      if(REGEX_CACHE.has(key)) return REGEX_CACHE.get(key);
       try{
-        return new RegExp(pattern,'i').test(text);
+        const regex = buildRegex(key);
+        REGEX_CACHE.set(key, regex);
+        return regex;
       }catch(err){
         console.warn('Patrón inválido ignorado', pattern, err);
-        return normalized.includes(String(pattern).toLowerCase());
+        REGEX_CACHE.set(key, null);
+        return null;
       }
+    }
+
+    function matchesPattern(text, pattern){
+      if(!pattern) return false;
+      const regex = compilePattern(pattern);
+      if(regex) return regex.test(text);
+      const normalized = (text||'').toLowerCase();
+      return normalized.includes(String(pattern).toLowerCase());
     }
     function matchesAnyRegex(text, regexList){
       return (regexList||[]).some(p=> matchesPattern(text, p));
@@ -528,6 +541,15 @@
       $('#rules-json').textContent = JSON.stringify(cfg.rules, null, 2);
       localStorage.removeItem('rules');
       alert('Reglas restauradas. Recarga la semana para aplicar cambios.');
+    });
+
+    // Silenciar errores causados por extensiones de navegador que cierran canales de mensaje
+    window.addEventListener('unhandledrejection', (event)=>{
+      const msg = event?.reason?.message || '';
+      if(typeof msg === 'string' && msg.includes('message channel closed before a response was received')){
+        event.preventDefault();
+        console.warn('Ignorando error externo del canal de mensajes:', event.reason);
+      }
     });
 
     // Autocarga si ya hay token en memoria del navegador (GIS puede reutilizar sesión)
