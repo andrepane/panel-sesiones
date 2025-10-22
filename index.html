@@ -133,6 +133,10 @@
   ],
   "otros_keywords": ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"]
 }</code></pre>
+          <div class="row" style="margin-top:8px">
+            <button id="save-rules">Guardar reglas</button>
+            <button id="reset-rules" class="btn-ghost">Restaurar por defecto</button>
+          </div>
           <div class="muted">* Si un título empieza por <strong>*</strong> antes del NH, se cuenta como <strong>ausencia</strong> (no suma a dadas).</div>
         </details>
 
@@ -233,40 +237,96 @@
     }
 
     async function loadCalendars(){
-      const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
-      if(!res.ok){ alert('Error cargando calendarios'); return; }
-      const data = await res.json();
-      calendars = data.items || [];
-      const sel = $('#calendar-select');
-      sel.innerHTML = '';
-      calendars.forEach(c=>{
-        const opt = document.createElement('option');
-        opt.value = c.id; opt.textContent = c.summary; sel.appendChild(opt);
-      });
-      // Autoseleccionar "Andrea LG" si existe
-      const lg = calendars.find(c=> (c.summary||'').toLowerCase().includes('andrea lg'));
-      if(lg){ sel.value = lg.id; }
-      if(calendars.length){ loadWeek(); }
+      try{
+        const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if(!res.ok){
+          const msg = await res.text();
+          throw new Error(`Error cargando calendarios (${res.status}): ${msg}`);
+        }
+        const data = await res.json();
+        calendars = data.items || [];
+        const sel = $('#calendar-select');
+        sel.innerHTML = '';
+        calendars.forEach(c=>{
+          const opt = document.createElement('option');
+          opt.value = c.id; opt.textContent = c.summary; sel.appendChild(opt);
+        });
+        // Autoseleccionar "Andrea LG" si existe
+        const lg = calendars.find(c=> (c.summary||'').toLowerCase().includes('andrea lg'));
+        if(lg){ sel.value = lg.id; }
+        if(calendars.length){ loadWeek(); }
+      }catch(err){
+        console.error(err);
+        alert('No se pudieron cargar los calendarios. Revisa la consola para más detalles.');
+      }
     }
 
     // ======== CLASIFICACIÓN ========
     function textFromEvent(ev){
       return [ev.summary||'', ev.location||'', (ev.description||'')].join(' ').toLowerCase().trim();
     }
-    function matchesAnyRegex(text, regexList){
-      return regexList.some(p=> new RegExp(p,'i').test(text));
+    function matchesPattern(text, pattern){
+      if(!pattern) return false;
+      const normalized = (text||'').toLowerCase();
+      try{
+        return new RegExp(pattern,'i').test(text);
+      }catch(err){
+        console.warn('Patrón inválido ignorado', pattern, err);
+        return normalized.includes(String(pattern).toLowerCase());
+      }
     }
+    function matchesAnyRegex(text, regexList){
+      return (regexList||[]).some(p=> matchesPattern(text, p));
+    }
+    function detectCentroFromRules(text){
+      const centros = cfg.rules.centros || {};
+      const lower = text.toLowerCase();
+      for(const [centro, patterns] of Object.entries(centros)){
+        if(matchesAnyRegex(lower, patterns)) return centro;
+      }
+      return null;
+    }
+
+    function safeSessionRegex(){
+      const pattern = cfg.rules.pattern_sesion || DEFAULT_RULES.pattern_sesion;
+      try{
+        return new RegExp(pattern, 'i');
+      }catch(err){
+        console.warn('pattern_sesion inválido, usando defecto', err);
+        return new RegExp(DEFAULT_RULES.pattern_sesion, 'i');
+      }
+    }
+
     function sessionParse(ev){
       const title = (ev.summary||'').trim();
-      const m = title.match(new RegExp(cfg.rules.pattern_sesion,'i'));
-      if(!m) return null;
+      const cleaned = title.replace(/^\*/, '').trim();
+      const regex = safeSessionRegex();
+      const m = cleaned.match(regex);
+      if(m){
+        const absent = /^\*/.test(title.trim());
+        const nh = m[1];
+        const nombre = m[2];
+        const letra = (m[3]||'').toUpperCase();
+        const centro = centroFromLetra(letra) || detectCentroFromRules(cleaned) || '—';
+        return {nh, nombre, centro, absent};
+      }
+
+      const centroFallback = detectCentroFromRules(cleaned);
+      if(!centroFallback) return null;
+      const nhFallback = cleaned.match(/\b\d{3,6}\b/);
+      if(!nhFallback) return null;
       const absent = /^\*/.test(title.trim());
-      const nh = m[1];
-      const nombre = m[2];
-      const letra = m[3].toUpperCase(); // B/G/P
-      return {nh, nombre, letra, absent};
+      const nhText = nhFallback[0];
+      const nhIndex = typeof nhFallback.index === 'number' ? nhFallback.index : cleaned.indexOf(nhText);
+      const nombre = cleaned
+        .slice(nhIndex + nhText.length)
+        .replace(/\([^)]*\).*/, '')
+        .replace(/[-–:]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return {nh: nhText, nombre, centro: centroFallback, absent};
     }
     function isBloqueHorario(ev){
       const t = (ev.summary||'').trim();
@@ -290,7 +350,7 @@
       if(letra==='G') return 'gines';
       if(letra==='B') return 'bormujos';
       if(letra==='P') return 'privado';
-      return '—';
+      return null;
     }
 
     // ======== CARGA DE EVENTOS ========
@@ -301,11 +361,19 @@
         timeMin: week.start.toISOString(), timeMax: week.end.toISOString(), maxResults: '2500'
       });
       const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?${params.toString()}`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }});
-      if(!res.ok){ alert('Error cargando eventos'); return; }
-      const data = await res.json();
-      const events = (data.items||[]).filter(e=> !e.status || e.status!=='cancelled');
-      render(events);
+      try{
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }});
+        if(!res.ok){
+          const msg = await res.text();
+          throw new Error(`Error cargando eventos (${res.status}): ${msg}`);
+        }
+        const data = await res.json();
+        const events = (data.items||[]).filter(e=> !e.status || e.status!=='cancelled');
+        render(events);
+      }catch(err){
+        console.error(err);
+        alert('No se pudieron cargar los eventos. Revisa la consola para más detalles.');
+      }
     }
 
     // ======== RENDER ========
@@ -332,7 +400,7 @@
         if(sp){
           tipo = 'sesión';
           estado = sp.absent ? 'ausencia' : 'dada';
-          centro = centroFromLetra(sp.letra);
+          centro = sp.centro || '—';
           if(sp.absent){
             ausencias++;
           }else{
@@ -370,6 +438,12 @@
         tbody.appendChild(tr);
       });
 
+      if(!tbody.children.length){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="8" class="muted">No hay eventos que mostrar con las reglas actuales.</td>`;
+        tbody.appendChild(tr);
+      }
+
       // Estadísticas
       $('#stat-dadas').textContent = String(dadas);
       $('#stat-ausencias').textContent = String(ausencias);
@@ -389,10 +463,17 @@
     $('#signin').addEventListener('click', ()=>{
       localStorage.setItem('clientId', $('#clientId').value.trim());
       initTokenClient();
-      tokenClient.requestAccessToken();
+      tokenClient?.requestAccessToken();
     });
 
-    $('#refresh').addEventListener('click', ()=>{ if(accessToken){ loadCalendars(); } else { initTokenClient(); tokenClient.requestAccessToken(); }});
+    $('#refresh').addEventListener('click', ()=>{
+      if(accessToken){
+        loadCalendars();
+      }else{
+        initTokenClient();
+        tokenClient?.requestAccessToken();
+      }
+    });
     $('#load-week').addEventListener('click', ()=>{ if(!accessToken) return alert('Conéctate primero'); loadWeek(); });
 
     $('#save-cfg').addEventListener('click', ()=>{
@@ -407,6 +488,13 @@
         cfg.rules = json; localStorage.setItem('rules', JSON.stringify(json));
         alert('Reglas guardadas. Recarga la semana para aplicar cambios.');
       }catch(e){ alert('JSON inválido en las reglas'); }
+    });
+
+    $('#reset-rules').addEventListener('click', ()=>{
+      cfg.rules = DEFAULT_RULES;
+      $('#rules-json').textContent = JSON.stringify(DEFAULT_RULES, null, 2);
+      localStorage.removeItem('rules');
+      alert('Reglas restauradas. Recarga la semana para aplicar cambios.');
     });
 
     // Autocarga si ya hay token en memoria del navegador (GIS puede reutilizar sesión)
