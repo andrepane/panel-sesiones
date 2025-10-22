@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Panel Semanal de Sesiones</title>
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    :root{
+      --bg:#0b1020; --card:#111634; --muted:#7d86b2; --text:#eef1ff; --accent:#7aa2ff; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji"; background:linear-gradient(180deg,#0b1020,#0b1020 60%,#0d1330); color:var(--text)}
+    header{display:flex; align-items:center; justify-content:space-between; padding:16px 20px; position:sticky; top:0; backdrop-filter: blur(8px); background:#0b1020cc; border-bottom:1px solid #1b224a}
+    .title{font-weight:800; letter-spacing:.3px}
+    .title small{display:block; font-weight:500; color:var(--muted)}
+    main{max-width:1100px; margin:24px auto; padding:0 16px 40px}
+
+    .grid{display:grid; gap:16px}
+    @media(min-width:1050px){ .grid{grid-template-columns: 2fr 1fr} }
+
+    .card{background:var(--card); border:1px solid #1b224a; border-radius:18px; padding:16px; box-shadow: 0 10px 30px #00000040}
+    .row{display:flex; gap:12px; flex-wrap:wrap; align-items:center}
+    .row > *{margin:4px 0}
+    button, input, select{background:#0f1540; color:var(--text); border:1px solid #222b5a; border-radius:12px; padding:10px 12px; font-weight:600}
+    button{cursor:pointer; transition:.2s transform}
+    button:hover{transform: translateY(-1px)}
+    .btn-primary{background:var(--accent); border-color: transparent; color:#0b1020}
+    .btn-ghost{background:transparent}
+
+    .stat{background:#0f1540; border:1px solid #1b224a; border-radius:14px; padding:12px 14px; min-width:140px}
+    .stat .label{color:var(--muted); font-size:12px}
+    .stat .value{font-size:22px; font-weight:800;}
+    .muted{color:var(--muted)}
+
+    .progress{height:14px; background:#0f1540; border:1px solid #1b224a; border-radius:999px; overflow:hidden}
+    .progress > span{display:block; height:100%; background:linear-gradient(90deg, var(--ok), var(--accent)); width:0}
+
+    table{width:100%; border-collapse: collapse; font-size:14px}
+    th, td{padding:10px 8px; border-bottom:1px solid #1b224a}
+    th{color:var(--muted); text-align:left; font-weight:600}
+    tbody tr:hover{background:#0e1440}
+
+    .pill{font-size:12px; font-weight:700; padding:4px 8px; border-radius:999px; border:1px solid #1b224a}
+    .pill.green{background:#10391f; border-color:#1d6a37}
+    .pill.orange{background:#3a2d12; border-color:#6b4f1a}
+    .pill.cyan{background:#103749; border-color:#165b7a}
+    .pill.purple{background:#2a1e44; border-color:#4c3c7a}
+    .pill.red{background:#3b1216; border-color:#6d1f28}
+
+    details summary{cursor:pointer; color:var(--muted)}
+    .footer{margin-top:20px; color:var(--muted); font-size:12px}
+    .k{color:#b6c3ff}
+    .warn{color:var(--warn)}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">
+      <div>Panel semanal de sesiones</div>
+      <small id="week-label">Semana actual</small>
+    </div>
+    <div class="row">
+      <input id="clientId" placeholder="Google OAuth CLIENT_ID" size="34"/>
+      <button id="signin" class="btn-primary">Conectar Google Calendar</button>
+      <button id="refresh" class="btn-ghost" title="Volver a cargar">↻</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="grid">
+      <!-- Columna izquierda: Resumen y tabla -->
+      <section class="card">
+        <h3 style="margin:0 0 12px">Resumen semanal</h3>
+        <div class="row" id="stats">
+          <div class="stat">
+            <div class="label">Sesiones dadas (45')</div>
+            <div class="value" id="stat-dadas">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">Ausencias</div>
+            <div class="value" id="stat-ausencias">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">CAIT Gines</div>
+            <div class="value" id="stat-gines">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">CAIT Bormujos</div>
+            <div class="value" id="stat-bormujos">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">Privado (P)</div>
+            <div class="value" id="stat-privado">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">Otros eventos</div>
+            <div class="value" id="stat-otros">–</div>
+          </div>
+        </div>
+        <div style="margin:14px 0 6px" class="muted">Ocupación (min de sesiones dadas / minutos de horario)</div>
+        <div class="progress"><span id="progress-bar"></span></div>
+        <div class="row" style="justify-content:space-between">
+          <div class="muted"><span id="minutes-label">– / – min</span></div>
+          <div class="muted"><strong id="pct-label">0%</strong></div>
+        </div>
+      </section>
+
+      <!-- Columna derecha: Configuración -->
+      <aside class="card">
+        <h3 style="margin:0 0 12px">Configuración</h3>
+        <label class="muted">Minutos de horario por semana (por defecto 38.5h → 2310 min)</label>
+        <div class="row">
+          <input id="cfg-minutes" type="number" min="0" step="15" value="2310" />
+          <button id="save-cfg">Guardar</button>
+        </div>
+
+        <details style="margin-top:12px">
+          <summary>Reglas (hechas a tu sistema)</summary>
+<pre style="white-space:pre-wrap; background:#0f1540; border:1px solid #1b224a; border-radius:12px; padding:10px; overflow:auto"><code id="rules-json" contenteditable="true">{
+  "centros": {
+    "gines": ["(g)"],
+    "bormujos": ["(b)"],
+    "privado": ["(p)"]
+  },
+  "pattern_sesion": "^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$",
+  "otros_excluir_totalmente": [
+    "^g\s*:\s*\d+$", "^b\s*:\s*\d+$", "^ent\.\s*[bg]\s*:\s*\d+"
+  ],
+  "bloques_horario": [
+    "^[bg]\s*\d{1,2}$"
+  ],
+  "otros_keywords": ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"]
+}</code></pre>
+          <div class="muted">* Si un título empieza por <strong>*</strong> antes del NH, se cuenta como <strong>ausencia</strong> (no suma a dadas).</div>
+        </details>
+
+        <p class="footer">1) Crea un <strong>OAuth 2.0 Client ID</strong> (Web) y pega el <em>Client ID</em>. 2) Autoriza el scope <code>https://www.googleapis.com/auth/calendar.readonly</code>. 3) La app solo lee el calendario <strong>Andrea LG</strong> por defecto (puedes cambiarlo en el selector).</p>
+      </aside>
+    </div>
+
+    <section class="card" style="margin-top:16px">
+      <div class="row" style="justify-content:space-between; align-items:end">
+        <div>
+          <h3 style="margin:0">Eventos de la semana</h3>
+          <div class="muted" id="range-label">—</div>
+        </div>
+        <div class="row">
+          <select id="calendar-select"></select>
+          <button id="load-week">Cargar semana</button>
+        </div>
+      </div>
+
+      <div style="overflow:auto; margin-top:8px">
+        <table id="events-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Inicio</th>
+              <th>Fin</th>
+              <th>Título</th>
+              <th>Centro</th>
+              <th>Estado</th>
+              <th>Tipo</th>
+              <th>Duración</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // ======== UTILIDADES DE TIEMPO (Semana Lunes-Domingo en Europe/Madrid) ========
+    const TZ = 'Europe/Madrid';
+    const fmtDate = (d)=> d.toLocaleDateString('es-ES', { timeZone: TZ });
+    const fmtTime = (d)=> d.toLocaleTimeString('es-ES', { timeZone: TZ, hour:'2-digit', minute:'2-digit' });
+
+    function getWeekRange(baseDate=new Date()){
+      const d = new Date(baseDate);
+      const day = (d.getDay() + 6) % 7; // 0..6 con 0 = lunes
+      const start = new Date(d);
+      start.setHours(0,0,0,0);
+      start.setDate(d.getDate() - day);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 7);
+      return {start, end};
+    }
+
+    // ======== ESTADO Y PERSISTENCIA ========
+    const $ = (sel)=> document.querySelector(sel);
+    const cfg = {
+      minutesAvailable: Number(localStorage.getItem('minutesAvailable') || 2310),
+      rules: JSON.parse(localStorage.getItem('rules') || '{}'),
+      clientId: localStorage.getItem('clientId') || ''
+    };
+
+    const DEFAULT_RULES = {
+      centros: { gines:["(g)"], bormujos:["(b)"], privado:["(p)"] },
+      pattern_sesion: "^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$",
+      otros_excluir_totalmente: ["^g\s*:\s*\d+$","^b\s*:\s*\d+$","^ent\.\s*[bg]\s*:\s*\d+"],
+      bloques_horario: ["^[bg]\s*\d{1,2}$"],
+      otros_keywords: ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"]
+    };
+
+    if(!cfg.rules || !cfg.rules.centros){ cfg.rules = DEFAULT_RULES; }
+
+    $('#cfg-minutes').value = cfg.minutesAvailable;
+    $('#clientId').value = cfg.clientId;
+    $('#rules-json').textContent = JSON.stringify(cfg.rules, null, 2);
+
+    const week = getWeekRange();
+    $('#week-label').textContent = `Del ${fmtDate(week.start)} al ${fmtDate(new Date(week.end-1))}`;
+    $('#range-label').textContent = `Consultando de ${fmtDate(week.start)} 00:00 a ${fmtDate(new Date(week.end-1))} 23:59 (${TZ})`;
+
+    // ======== AUTH (GIS Token Client) ========
+    let tokenClient = null; let accessToken = null; let calendars = [];
+
+    function initTokenClient(){
+      const clientId = $('#clientId').value.trim();
+      if(!clientId){ alert('Introduce tu Google OAuth CLIENT_ID'); return; }
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'https://www.googleapis.com/auth/calendar.readonly',
+        prompt: '',
+        callback: (resp)=>{
+          if(resp && resp.access_token){ accessToken = resp.access_token; loadCalendars(); }
+          else alert('No se obtuvo access_token');
+        }
+      });
+    }
+
+    async function loadCalendars(){
+      const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if(!res.ok){ alert('Error cargando calendarios'); return; }
+      const data = await res.json();
+      calendars = data.items || [];
+      const sel = $('#calendar-select');
+      sel.innerHTML = '';
+      calendars.forEach(c=>{
+        const opt = document.createElement('option');
+        opt.value = c.id; opt.textContent = c.summary; sel.appendChild(opt);
+      });
+      // Autoseleccionar "Andrea LG" si existe
+      const lg = calendars.find(c=> (c.summary||'').toLowerCase().includes('andrea lg'));
+      if(lg){ sel.value = lg.id; }
+      if(calendars.length){ loadWeek(); }
+    }
+
+    // ======== CLASIFICACIÓN ========
+    function textFromEvent(ev){
+      return [ev.summary||'', ev.location||'', (ev.description||'')].join(' ').toLowerCase().trim();
+    }
+    function matchesAnyRegex(text, regexList){
+      return regexList.some(p=> new RegExp(p,'i').test(text));
+    }
+    function sessionParse(ev){
+      const title = (ev.summary||'').trim();
+      const m = title.match(new RegExp(cfg.rules.pattern_sesion,'i'));
+      if(!m) return null;
+      const absent = /^\*/.test(title.trim());
+      const nh = m[1];
+      const nombre = m[2];
+      const letra = m[3].toUpperCase(); // B/G/P
+      return {nh, nombre, letra, absent};
+    }
+    function isBloqueHorario(ev){
+      const t = (ev.summary||'').trim();
+      return matchesAnyRegex(t, cfg.rules.bloques_horario||[]);
+    }
+    function isExcluirTotal(ev){
+      const t = (ev.summary||'').trim();
+      return matchesAnyRegex(t, cfg.rules.otros_excluir_totalmente||[]);
+    }
+    function isOtroPorKeyword(ev){
+      const t = textFromEvent(ev);
+      return (cfg.rules.otros_keywords||[]).some(k=> t.includes(k.toLowerCase()));
+    }
+    function durationMinutes(ev){
+      const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
+      const end = new Date(ev.end.dateTime || (ev.end.date + 'T23:59:59'));
+      return Math.max(0, Math.round((end - start)/60000));
+    }
+
+    function centroFromLetra(letra){
+      if(letra==='G') return 'gines';
+      if(letra==='B') return 'bormujos';
+      if(letra==='P') return 'privado';
+      return '—';
+    }
+
+    // ======== CARGA DE EVENTOS ========
+    async function loadWeek(){
+      const calId = $('#calendar-select').value || 'primary';
+      const params = new URLSearchParams({
+        singleEvents: 'true', orderBy: 'startTime', timeZone: TZ,
+        timeMin: week.start.toISOString(), timeMax: week.end.toISOString(), maxResults: '2500'
+      });
+      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?${params.toString()}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }});
+      if(!res.ok){ alert('Error cargando eventos'); return; }
+      const data = await res.json();
+      const events = (data.items||[]).filter(e=> !e.status || e.status!=='cancelled');
+      render(events);
+    }
+
+    // ======== RENDER ========
+    function render(events){
+      const tbody = $('#events-table tbody');
+      tbody.innerHTML = '';
+
+      let dadas=0, ausencias=0, otros=0, gines=0, bormujos=0, privado=0;
+      let minutosSesionDadas = 0; // siempre 45' por sesión dada
+
+      events.forEach(ev=>{
+        const title = (ev.summary||'').trim();
+        if(isExcluirTotal(ev)) return; // ni contar ni listar
+
+        const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
+        const end   = new Date(ev.end.dateTime   || (ev.end.date   + 'T23:59:59'));
+        const mins  = durationMinutes(ev);
+
+        let tipo='otro';
+        let estado='—';
+        let centro='—';
+
+        const sp = sessionParse(ev);
+        if(sp){
+          tipo = 'sesión';
+          estado = sp.absent ? 'ausencia' : 'dada';
+          centro = centroFromLetra(sp.letra);
+          if(sp.absent){
+            ausencias++;
+          }else{
+            dadas++;
+            minutosSesionDadas += 45; // fijo por requerimiento
+            if(centro==='gines') gines++;
+            else if(centro==='bormujos') bormujos++;
+            else if(centro==='privado') privado++;
+          }
+        }else if(isBloqueHorario(ev)){
+          tipo = 'bloque';
+          estado = '—';
+        }else if(isOtroPorKeyword(ev)){
+          tipo = 'otro';
+          otros++;
+        }else{
+          // Si no encaja en nada, lo marcamos como otros, pero lo listamos
+          tipo = 'otro';
+          otros++;
+        }
+
+        const centroPillClass = centro==='gines' ? 'green' : centro==='bormujos' ? 'orange' : centro==='privado' ? 'purple' : 'cyan';
+        const estadoPillClass = estado==='dada' ? 'green' : estado==='ausencia' ? 'red' : 'cyan';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${fmtDate(start)}</td>
+          <td>${ev.start.date ? '—' : fmtTime(start)}</td>
+          <td>${ev.end.date ? '—' : fmtTime(end)}</td>
+          <td>${title || '<span class="muted">(sin título)</span>'}</td>
+          <td><span class="pill ${centroPillClass}">${centro}</span></td>
+          <td><span class="pill ${estadoPillClass}">${estado}</span></td>
+          <td>${tipo}</td>
+          <td>${mins} min</td>`;
+        tbody.appendChild(tr);
+      });
+
+      // Estadísticas
+      $('#stat-dadas').textContent = String(dadas);
+      $('#stat-ausencias').textContent = String(ausencias);
+      $('#stat-otros').textContent = String(otros);
+      $('#stat-gines').textContent = String(gines);
+      $('#stat-bormujos').textContent = String(bormujos);
+      $('#stat-privado').textContent = String(privado);
+
+      const available = Number(cfg.minutesAvailable)||0; // por defecto 2310 (38.5h)
+      const pct = available>0 ? Math.min(100, Math.round((minutosSesionDadas/available)*100)) : 0;
+      $('#minutes-label').textContent = `${minutosSesionDadas} / ${available} min`;
+      $('#pct-label').textContent = `${pct}%`;
+      $('#progress-bar').style.width = pct + '%';
+    }
+
+    // ======== EVENTOS UI ========
+    $('#signin').addEventListener('click', ()=>{
+      localStorage.setItem('clientId', $('#clientId').value.trim());
+      initTokenClient();
+      tokenClient.requestAccessToken();
+    });
+
+    $('#refresh').addEventListener('click', ()=>{ if(accessToken){ loadCalendars(); } else { initTokenClient(); tokenClient.requestAccessToken(); }});
+    $('#load-week').addEventListener('click', ()=>{ if(!accessToken) return alert('Conéctate primero'); loadWeek(); });
+
+    $('#save-cfg').addEventListener('click', ()=>{
+      const m = Number($('#cfg-minutes').value||0);
+      cfg.minutesAvailable = m; localStorage.setItem('minutesAvailable', String(m));
+      if($('#events-table tbody').children.length) $('#refresh').click();
+    });
+
+    $('#save-rules').addEventListener('click', ()=>{
+      try{
+        const json = JSON.parse($('#rules-json').textContent);
+        cfg.rules = json; localStorage.setItem('rules', JSON.stringify(json));
+        alert('Reglas guardadas. Recarga la semana para aplicar cambios.');
+      }catch(e){ alert('JSON inválido en las reglas'); }
+    });
+
+    // Autocarga si ya hay token en memoria del navegador (GIS puede reutilizar sesión)
+    window.addEventListener('load', ()=>{
+      if(cfg.clientId){ initTokenClient(); }
+    });
+  </script>
+</body>
+</html>
