@@ -1,0 +1,12 @@
+{
+  "name": "panel-sesiones",
+  "version": "1.0.0",
+  "description": "Panel semanal de sesiones",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT"
+}
