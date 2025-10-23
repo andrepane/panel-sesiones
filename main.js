@@ -38,11 +38,33 @@ function getYearRange(baseDate=new Date()){
 
 // ======== ESTADO Y PERSISTENCIA ========
 const $ = (sel)=> document.querySelector(sel);
+
+const storedHoursValue = localStorage.getItem('hoursAvailable');
+const storedMinutesValue = localStorage.getItem('minutesAvailable');
+let initialWeeklyMinutes = 2310;
+if(storedHoursValue !== null){
+  const parsed = Number(storedHoursValue);
+  if(!Number.isNaN(parsed)){
+    initialWeeklyMinutes = parsed * 60;
+  }
+}else if(storedMinutesValue !== null){
+  const parsed = Number(storedMinutesValue);
+  if(!Number.isNaN(parsed)){
+    initialWeeklyMinutes = parsed;
+  }
+}
+
 const cfg = {
-  minutesAvailable: Number(localStorage.getItem('minutesAvailable') || 2310),
+  minutesAvailable: initialWeeklyMinutes,
+  hoursAvailable: initialWeeklyMinutes / 60,
   rules: JSON.parse(localStorage.getItem('rules') || '{}'),
   clientId: localStorage.getItem('clientId') || ''
 };
+
+if(!Number.isFinite(cfg.hoursAvailable) || cfg.hoursAvailable <= 0){
+  cfg.hoursAvailable = 38.5;
+  cfg.minutesAvailable = cfg.hoursAvailable * 60;
+}
 
 const storedWeekStartIso = localStorage.getItem('weekStartISO') || '';
 
@@ -55,7 +77,7 @@ const weekOtrosEl = $('#stat-otros');
 const weekGinesEl = $('#stat-gines');
 const weekBormujosEl = $('#stat-bormujos');
 const weekPrivadoEl = $('#stat-privado');
-const minutesLabelEl = $('#minutes-label');
+const hoursLabelEl = $('#hours-label');
 const pctLabelEl = $('#pct-label');
 const progressBarEl = $('#progress-bar');
 const monthDadasEl = $('#stat-month-dadas');
@@ -65,7 +87,7 @@ const monthOtrosEl = $('#stat-month-otros');
 const monthPctEl = $('#stat-month-pct');
 const monthOccupancyEl = $('#stat-month-occupancy');
 const monthLabelEl = $('#month-label');
-const monthMinutesLabelEl = $('#month-occupancy-label');
+const monthHoursLabelEl = $('#month-hours-label');
 const yearDadasEl = $('#stat-year-dadas');
 const yearAusenciasEl = $('#stat-year-ausencias');
 const yearProgramadasEl = $('#stat-year-programadas');
@@ -73,11 +95,11 @@ const yearOtrosEl = $('#stat-year-otros');
 const yearPctEl = $('#stat-year-pct');
 const yearOccupancyEl = $('#stat-year-occupancy');
 const yearLabelEl = $('#year-label');
-const yearMinutesLabelEl = $('#year-occupancy-label');
-const baseDateLabelEl = $('#base-date-label');
+const yearHoursLabelEl = $('#year-hours-label');
 const loadingIndicatorEl = $('#loading-indicator');
 const statusFiltersEl = $('#status-filters');
 const centerFiltersEl = $('#center-filters');
+const hoursInputEl = $('#cfg-hours');
 const exportCsvBtn = $('#export-csv');
 const printViewBtn = $('#print-view');
 
@@ -175,37 +197,63 @@ function formatPercent(value){
   return `${fixed.replace(/\.0$/, '')}%`;
 }
 
-function formatMinutes(value){
-  if(!Number.isFinite(value) || value < 0) return '–';
-  const rounded = Math.round(value);
-  if(Math.abs(rounded - value) < 0.05){
-    return String(rounded);
-  }
-  return value.toFixed(1).replace(/\.0$/, '');
+function trimTrailingZeros(text){
+  return text.replace(/(\.\d*?[1-9])0+$/,'$1').replace(/\.0+$/,'');
 }
 
-function formatMinutesPair(used, available){
-  const usedText = formatMinutes(used);
-  const availableText = (Number.isFinite(available) && available > 0) ? formatMinutes(available) : '–';
-  if(usedText === '–' && availableText === '–') return '—';
-  if(availableText === '–') return `${usedText} / – min`;
-  return `${usedText} / ${availableText} min`;
+function minutesToHours(value){
+  if(!Number.isFinite(value)) return 0;
+  return value / 60;
+}
+
+function formatHoursValue(value){
+  if(!Number.isFinite(value) || value < 0){
+    return '–';
+  }
+  const decimals = value >= 10 ? 1 : 2;
+  return trimTrailingZeros(value.toFixed(decimals));
+}
+
+function formatHoursPair(usedMinutes, availableMinutes){
+  const used = minutesToHours(usedMinutes);
+  const available = minutesToHours(availableMinutes);
+  const usedText = formatHoursValue(used);
+  if(!Number.isFinite(availableMinutes) || availableMinutes <= 0){
+    return `${usedText} h`;
+  }
+  const availableText = formatHoursValue(available);
+  return `${usedText} h / ${availableText} h`;
+}
+
+function formatDuration(mins){
+  if(!Number.isFinite(mins) || mins <= 0) return '0 min';
+  const hours = Math.floor(mins / 60);
+  const minutes = Math.round(mins - hours * 60);
+  const parts = [];
+  if(hours > 0){ parts.push(`${hours} h`); }
+  if(minutes > 0 || parts.length === 0){ parts.push(`${minutes} min`); }
+  return parts.join(' ');
+}
+
+function formatHoursDecimal(mins){
+  const hours = minutesToHours(mins);
+  if(!Number.isFinite(hours)) return '';
+  return trimTrailingZeros(hours.toFixed(2));
 }
 
 let week = null;
 let weekRequestToken = 0;
 let monthSummaryToken = 0;
 let yearSummaryToken = 0;
+let lastMonthSummaryData = null;
+let lastYearSummaryData = null;
 
 function updateWeekUI(){
   if(!week) return;
   const start = week.start;
   const end = new Date(week.end - 1);
   $('#week-label').textContent = `Del ${fmtDate(start)} al ${fmtDate(end)}`;
-  $('#range-label').textContent = `Consulta semanal (timeMin/timeMax): ${week.start.toISOString()} → ${week.end.toISOString()}`;
-  if(baseDateLabelEl){
-    baseDateLabelEl.textContent = `Rango local: ${fmtDate(start)} 00:00 → ${fmtDate(end)} 23:59 (${TZ})`;
-  }
+  $('#range-label').textContent = `Semana consultada: ${fmtDate(start)} → ${fmtDate(end)}`;
   if(weekPicker){ weekPicker.value = formatDateInputValue(start); }
 }
 
@@ -243,7 +291,8 @@ function resetMonthSummary(text='—'){
   monthPctEl.textContent = '–';
   monthOccupancyEl.textContent = '–';
   monthLabelEl.textContent = text;
-  monthMinutesLabelEl.textContent = '—';
+  monthHoursLabelEl.textContent = '—';
+  lastMonthSummaryData = null;
 }
 
 function setMonthSummaryLoading(range){
@@ -254,7 +303,8 @@ function setMonthSummaryLoading(range){
   monthPctEl.textContent = '…';
   monthOccupancyEl.textContent = '…';
   monthLabelEl.textContent = range ? `Cargando ${formatMonthRangeText(range)}...` : 'Cargando resumen mensual...';
-  monthMinutesLabelEl.textContent = '…';
+  monthHoursLabelEl.textContent = '…';
+  lastMonthSummaryData = null;
 }
 
 function resetYearSummary(text='—'){
@@ -265,7 +315,8 @@ function resetYearSummary(text='—'){
   yearPctEl.textContent = '–';
   yearOccupancyEl.textContent = '–';
   yearLabelEl.textContent = text;
-  yearMinutesLabelEl.textContent = '—';
+  yearHoursLabelEl.textContent = '—';
+  lastYearSummaryData = null;
 }
 
 function setYearSummaryLoading(range){
@@ -276,7 +327,8 @@ function setYearSummaryLoading(range){
   yearPctEl.textContent = '…';
   yearOccupancyEl.textContent = '…';
   yearLabelEl.textContent = range ? `Cargando ${formatYearRangeText(range)}...` : 'Cargando resumen anual...';
-  yearMinutesLabelEl.textContent = '…';
+  yearHoursLabelEl.textContent = '…';
+  lastYearSummaryData = null;
 }
 
 function cloneRules(rules){
@@ -285,7 +337,10 @@ function cloneRules(rules){
 
 if(!cfg.rules || !cfg.rules.centros){ cfg.rules = cloneRules(DEFAULT_RULES); }
 
-$('#cfg-minutes').value = cfg.minutesAvailable;
+if(hoursInputEl){
+  const roundedHours = trimTrailingZeros(cfg.hoursAvailable.toFixed(2));
+  hoursInputEl.value = roundedHours || '0';
+}
 $('#clientId').value = cfg.clientId;
 $('#rules-json').textContent = JSON.stringify(cfg.rules, null, 2);
 
@@ -553,6 +608,8 @@ function summarizeProcessedEvents(list){
   });
   summary.totalEventos = summary.dadas + summary.ausencias + summary.programadas + summary.enCurso + summary.otros;
   summary.sessionMinutes = summary.dadas * MINUTES_PER_SESSION;
+  summary.sessionHours = minutesToHours(summary.sessionMinutes);
+  summary.totalHours = minutesToHours(summary.totalMinutes);
   return summary;
 }
 
@@ -633,7 +690,8 @@ function renderMonthSummary(events, range){
   const extras = summary.totalEventos > 0 ? ` · Total eventos: ${summary.totalEventos}` : '';
   const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
   monthLabelEl.textContent = `${formatMonthRangeText(range)}${extras}${enCursoText}`;
-  monthMinutesLabelEl.textContent = availableMinutes > 0 ? formatMinutesPair(summary.sessionMinutes, availableMinutes) : '—';
+  monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
+  lastMonthSummaryData = { summary, range };
 }
 
 function renderYearSummary(events, range){
@@ -654,7 +712,8 @@ function renderYearSummary(events, range){
   const extras = summary.totalEventos > 0 ? ` · Total eventos: ${summary.totalEventos}` : '';
   const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
   yearLabelEl.textContent = `${formatYearRangeText(range)}${extras}${enCursoText}`;
-  yearMinutesLabelEl.textContent = availableMinutes > 0 ? formatMinutesPair(summary.sessionMinutes, availableMinutes) : '—';
+  yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
+  lastYearSummaryData = { summary, range };
 }
 
 // ======== CARGA DE EVENTOS ========
@@ -759,13 +818,30 @@ function updateWeeklyStats(summary){
   if(weekGinesEl) weekGinesEl.textContent = String(summary.gines);
   if(weekBormujosEl) weekBormujosEl.textContent = String(summary.bormujos);
   if(weekPrivadoEl) weekPrivadoEl.textContent = String(summary.privado);
-  const available = Number(cfg.minutesAvailable)||0;
-  const occupancy = computeOccupancyPercent(summary.sessionMinutes, available);
+  const availableMinutes = Number(cfg.minutesAvailable)||0;
+  const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
   const pctText = formatPercent(occupancy);
   const pctForBar = occupancy == null ? 0 : Math.max(0, Math.min(100, occupancy));
-  if(minutesLabelEl) minutesLabelEl.textContent = formatMinutesPair(summary.sessionMinutes, available);
+  if(hoursLabelEl) hoursLabelEl.textContent = formatHoursPair(summary.sessionMinutes, availableMinutes);
   if(pctLabelEl) pctLabelEl.textContent = pctText;
   if(progressBarEl) progressBarEl.style.width = pctForBar + '%';
+}
+
+function refreshStoredSummaries(){
+  if(lastMonthSummaryData){
+    const { summary, range } = lastMonthSummaryData;
+    const availableMinutes = minutesAvailableForRange(range);
+    const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
+    monthOccupancyEl.textContent = formatPercent(occupancy);
+    monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
+  }
+  if(lastYearSummaryData){
+    const { summary, range } = lastYearSummaryData;
+    const availableMinutes = minutesAvailableForRange(range);
+    const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
+    yearOccupancyEl.textContent = formatPercent(occupancy);
+    yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
+  }
 }
 
 function statusMatches(item){
@@ -840,7 +916,7 @@ function renderTableRows(list){
       tr.appendChild(tdTipo);
 
       const tdDuracion = document.createElement('td');
-      tdDuracion.textContent = `${item.mins} min`;
+      tdDuracion.textContent = formatDuration(item.mins);
       tr.appendChild(tdDuracion);
 
       tbody.appendChild(tr);
@@ -859,7 +935,11 @@ function renderTableRows(list){
   const cell3 = document.createElement('td');
   cell3.textContent = `Ausencias: ${subtotal.ausencias}`;
   const cell4 = document.createElement('td');
-  cell4.textContent = `Min dadas: ${formatMinutes(subtotal.sessionMinutes)} · Min totales: ${formatMinutes(subtotal.totalMinutes)}`;
+  const subtotalSessionHours = formatHoursValue(subtotal.sessionHours);
+  const subtotalTotalHours = formatHoursValue(subtotal.totalHours);
+  const subtotalSessionLabel = subtotalSessionHours === '–' ? '–' : `${subtotalSessionHours} h`;
+  const subtotalTotalLabel = subtotalTotalHours === '–' ? '–' : `${subtotalTotalHours} h`;
+  cell4.textContent = `Horas sesiones: ${subtotalSessionLabel} · Duración total: ${subtotalTotalLabel}`;
   subtotalRow.appendChild(cell1);
   subtotalRow.appendChild(cell2);
   subtotalRow.appendChild(cell3);
@@ -894,7 +974,7 @@ function exportWeekToCsv(){
     alert('No hay eventos para exportar con el filtro actual.');
     return;
   }
-  const rows = [['Fecha','Inicio','Fin','Título','Centro','Estado','Tipo','Duración (min)']];
+  const rows = [['Fecha','Inicio','Fin','Título','Centro','Estado','Tipo','Duración (h)']];
   filteredWeekEvents.forEach(item=>{
     rows.push([
       fmtDate(item.start),
@@ -904,7 +984,7 @@ function exportWeekToCsv(){
       item.centroLabel || '—',
       item.estadoLabel,
       capitalize(item.tipo),
-      String(item.mins)
+      formatHoursDecimal(item.mins)
     ]);
   });
   const csv = rows
@@ -984,12 +1064,19 @@ weekPicker?.addEventListener('change', (event)=>{
 });
 
 $('#save-cfg').addEventListener('click', ()=>{
-  const m = Number($('#cfg-minutes').value||0);
-  cfg.minutesAvailable = m;
-  localStorage.setItem('minutesAvailable', String(m));
+  const inputValue = Number(hoursInputEl?.value || 0);
+  const sanitizedHours = Number.isFinite(inputValue) && inputValue >= 0 ? inputValue : 0;
+  cfg.hoursAvailable = sanitizedHours;
+  cfg.minutesAvailable = Math.round(sanitizedHours * 60);
+  localStorage.setItem('hoursAvailable', String(sanitizedHours));
+  localStorage.setItem('minutesAvailable', String(cfg.minutesAvailable));
+  if(hoursInputEl){
+    hoursInputEl.value = trimTrailingZeros(sanitizedHours.toFixed(2));
+  }
   if(processedWeekEvents.length){
     updateWeeklyStats(summarizeProcessedEvents(processedWeekEvents));
   }
+  refreshStoredSummaries();
 });
 
 $('#save-rules').addEventListener('click', ()=>{
