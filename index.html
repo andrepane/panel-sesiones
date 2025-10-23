@@ -3,251 +3,72 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Panel Semanal de Sesiones</title>
-  <!-- Google Identity Services -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <title>Panel semanal de sesiones</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header>
-    <div class="title">
-      <div>Panel semanal de sesiones</div>
-      <small id="week-label">Semana actual</small>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Visión general</p>
+      <h1>Panel semanal de sesiones</h1>
+      <p class="muted" id="week-range-label">—</p>
     </div>
-    <div class="row">
-      <input id="clientId" placeholder="Google OAuth CLIENT_ID" size="34"/>
-      <button id="signin" class="btn-primary">Conectar Google Calendar</button>
-      <button id="refresh" class="btn-ghost" title="Volver a cargar">↻</button>
+    <div class="header-actions">
+      <button id="format-toggle" class="toggle" type="button" aria-pressed="false">
+        Formato 1.5 h
+      </button>
     </div>
   </header>
 
-  <div id="loading-indicator" class="loading-indicator hidden">
-    <div class="label"><span class="spinner"></span> Cargando…</div>
-  </div>
-
-  <main>
-    <div class="grid">
-      <!-- Columna izquierda: Resumen y tabla -->
-      <section class="card">
-        <h3 style="margin:0 0 12px">Resumen semanal</h3>
-        <div class="row" id="stats">
-          <div class="stat">
-            <div class="label">Sesiones dadas (45')</div>
-            <div class="value" id="stat-dadas">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">Ausencias</div>
-            <div class="value" id="stat-ausencias">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">Programadas</div>
-            <div class="value" id="stat-programadas">–</div>
-            <div class="muted" style="font-size:12px" id="stat-en-curso">En curso: –</div>
-          </div>
-          <div class="stat">
-            <div class="label">CAIT Gines</div>
-            <div class="value" id="stat-gines">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">CAIT Bormujos</div>
-            <div class="value" id="stat-bormujos">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">Privado (P)</div>
-            <div class="value" id="stat-privado">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">Otros eventos</div>
-            <div class="value" id="stat-otros">–</div>
-          </div>
-        </div>
-        <div style="margin:14px 0 6px" class="muted">Ocupación (min de sesiones dadas / minutos de horario)</div>
-        <div class="progress"><span id="progress-bar"></span></div>
-        <div class="row" style="justify-content:space-between">
-          <div class="muted"><span id="minutes-label">– / – min</span></div>
-          <div class="muted"><strong id="pct-label">0%</strong></div>
-        </div>
-
-        <div style="border-top:1px solid #1b224a; margin:18px 0 12px"></div>
-        <div class="muted" style="font-weight:600; text-transform:uppercase; font-size:12px">Resumen mensual</div>
-        <div class="row" style="margin-top:12px" id="month-stats">
-          <div class="stat">
-            <div class="label">Dadas mes (45')</div>
-            <div class="value" id="stat-month-dadas">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">Ausencias mes</div>
-            <div class="value" id="stat-month-ausencias">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">Programadas mes</div>
-            <div class="value" id="stat-month-programadas">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">Otros mes</div>
-            <div class="value" id="stat-month-otros">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">% dadas</div>
-            <div class="value" id="stat-month-pct">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">% horario (38,5h)</div>
-            <div class="value" id="stat-month-occupancy">–</div>
-          </div>
-        </div>
-        <div class="muted" id="month-label">—</div>
-        <div class="muted" id="month-occupancy-label">—</div>
-
-        <div style="border-top:1px solid #1b224a; margin:18px 0 12px"></div>
-        <div class="muted" style="font-weight:600; text-transform:uppercase; font-size:12px">Resumen anual</div>
-        <div class="row" style="margin-top:12px" id="year-stats">
-          <div class="stat">
-            <div class="label">Dadas año (45')</div>
-            <div class="value" id="stat-year-dadas">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">Ausencias año</div>
-            <div class="value" id="stat-year-ausencias">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">Programadas año</div>
-            <div class="value" id="stat-year-programadas">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">Otros año</div>
-            <div class="value" id="stat-year-otros">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">% dadas</div>
-            <div class="value" id="stat-year-pct">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">% horario (38,5h)</div>
-            <div class="value" id="stat-year-occupancy">–</div>
-          </div>
-        </div>
-        <div class="muted" id="year-label">—</div>
-        <div class="muted" id="year-occupancy-label">—</div>
-      </section>
-
-      <!-- Columna derecha: Configuración -->
-      <aside class="card">
-        <h3 style="margin:0 0 12px">Configuración</h3>
-        <label class="muted">Minutos de horario por semana (por defecto 38.5h → 2310 min)</label>
-        <div class="row">
-          <input id="cfg-minutes" type="number" min="0" step="15" value="2310" />
-          <button id="save-cfg">Guardar</button>
-        </div>
-
-        <details style="margin-top:12px">
-          <summary>Reglas (hechas a tu sistema)</summary>
-<pre style="white-space:pre-wrap; background:#0f1540; border:1px solid #1b224a; border-radius:12px; padding:10px; overflow:auto"><code id="rules-json" contenteditable="true">{
-  "centros": {
-    "gines": ["(g)"],
-    "bormujos": ["(b)"],
-    "privado": ["(p)"]
-  },
-  "pattern_sesion": "^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$",
-  "otros_excluir_totalmente": [
-    "^g\s*:\s*\d+$", "^b\s*:\s*\d+$", "^ent\.\s*[bg]\s*:\s*\d+"
-  ],
-  "bloques_horario": [
-    "^[bg]\s*\d{1,2}$"
-  ],
-  "otros_keywords": ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"]
-}</code></pre>
-          <div class="row" style="margin-top:8px">
-            <button id="save-rules">Guardar reglas</button>
-            <button id="reset-rules" class="btn-ghost">Restaurar por defecto</button>
-          </div>
-          <div class="muted">* Si un título empieza por <strong>*</strong> antes del NH, se cuenta como <strong>ausencia</strong> (no suma a dadas).</div>
-        </details>
-
-        <p class="footer">1) Crea un <strong>OAuth 2.0 Client ID</strong> (Web) y pega el <em>Client ID</em>. 2) Autoriza el scope <code>https://www.googleapis.com/auth/calendar.readonly</code>. 3) La app solo lee el calendario <strong>Andrea LG</strong> por defecto (puedes cambiarlo en el selector).</p>
-      </aside>
-    </div>
-
-    <section class="card" style="margin-top:16px">
-      <div class="row" style="justify-content:space-between; align-items:end; flex-wrap:wrap; gap:12px">
-        <div>
-          <h3 style="margin:0">Eventos de la semana</h3>
-          <div class="muted" id="range-label">—</div>
-        </div>
-        <div class="row" style="gap:8px; flex-wrap:wrap">
-          <select id="calendar-select"></select>
-          <button id="load-week">Cargar semana</button>
+  <main class="dashboard" aria-live="polite">
+    <section class="panel" aria-labelledby="weekly-load-title">
+      <div class="panel-header">
+        <h2 id="weekly-load-title">Carga semanal</h2>
+        <p class="muted">Resumen de la semana en curso</p>
+      </div>
+      <div class="kpi-grid" id="weekly-kpis"></div>
+      <div class="accordion" data-accordion>
+        <button class="accordion-trigger" type="button" aria-expanded="false">
+          Detalle por centro
+        </button>
+        <div class="accordion-content" hidden>
+          <ul class="detail-list" id="center-breakdown"></ul>
         </div>
       </div>
-
-      <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:12px">
-        <button id="prev-week" class="btn-ghost" title="Semana anterior">◀</button>
-        <input id="week-picker" type="date" />
-        <button id="next-week" class="btn-ghost" title="Semana siguiente">▶</button>
-        <button id="today-week" class="btn-ghost">Semana actual</button>
-      </div>
-
-      <div class="muted" id="base-date-label" style="margin:6px 0 0"></div>
-
-      <div class="legend">
-        <div>
-          <div class="muted" style="font-size:11px; font-weight:700; letter-spacing:.6px; text-transform:uppercase">Estados</div>
-          <div class="legend-group">
-            <div class="legend-item"><span class="legend-dot green"></span>Dada</div>
-            <div class="legend-item"><span class="legend-dot yellow"></span>Programada</div>
-            <div class="legend-item"><span class="legend-dot blue"></span>En curso</div>
-            <div class="legend-item"><span class="legend-dot red"></span>Ausencia</div>
-            <div class="legend-item"><span class="legend-dot gray"></span>Otros</div>
-          </div>
-        </div>
-        <div>
-          <div class="muted" style="font-size:11px; font-weight:700; letter-spacing:.6px; text-transform:uppercase">Centros</div>
-          <div class="legend-group">
-            <div class="legend-item"><span class="legend-dot green"></span>Gines</div>
-            <div class="legend-item"><span class="legend-dot orange"></span>Bormujos</div>
-            <div class="legend-item"><span class="legend-dot purple"></span>Privado</div>
-          </div>
+      <div class="accordion" data-accordion>
+        <button class="accordion-trigger" type="button" aria-expanded="false">
+          Detalle por día
+        </button>
+        <div class="accordion-content" hidden>
+          <ul class="detail-list" id="day-breakdown"></ul>
         </div>
       </div>
+    </section>
 
-      <div class="chip-group" id="status-filters">
-        <button class="chip" data-key="dada">Dadas</button>
-        <button class="chip" data-key="programada">Programadas</button>
-        <button class="chip" data-key="ausencia">Ausencias</button>
-        <button class="chip" data-key="otro">Otros</button>
+    <section class="panel" aria-labelledby="patients-title">
+      <div class="panel-header">
+        <h2 id="patients-title">Pacientes activos</h2>
+        <p class="muted">Sesiones completadas esta semana</p>
       </div>
+      <div class="table" role="table">
+        <div class="table-header" role="row">
+          <span role="columnheader">Nombre</span>
+          <span role="columnheader">Sesiones</span>
+          <span role="columnheader">Horas</span>
+        </div>
+        <div id="patients-list"></div>
+      </div>
+    </section>
 
-      <div class="chip-group" id="center-filters">
-        <button class="chip" data-key="gines">Gines</button>
-        <button class="chip" data-key="bormujos">Bormujos</button>
-        <button class="chip" data-key="privado">Privado</button>
+    <section class="panel hidden" id="alerts-panel" aria-labelledby="alerts-title">
+      <div class="panel-header">
+        <h2 id="alerts-title">Alertas</h2>
+        <p class="muted">Aspectos que requieren atención</p>
       </div>
-
-      <div class="table-actions">
-        <button id="export-csv" class="btn-ghost">Exportar CSV</button>
-        <button id="print-view" class="btn-ghost">Imprimir vista</button>
-      </div>
-
-      <div style="overflow:auto; margin-top:8px">
-        <table id="events-table">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Inicio</th>
-              <th>Fin</th>
-              <th>Título</th>
-              <th>Centro</th>
-              <th>Estado</th>
-              <th>Tipo</th>
-              <th>Duración</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <ul class="alerts" id="alerts-list"></ul>
     </section>
   </main>
 
-  <script src="main.js"></script>
+  <script type="module" src="main.js"></script>
 </body>
 </html>
