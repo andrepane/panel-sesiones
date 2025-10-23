@@ -28,6 +28,9 @@
     button:hover{transform: translateY(-1px)}
     .btn-primary{background:var(--accent); border-color: transparent; color:#0b1020}
     .btn-ghost{background:transparent}
+    .chip{background:#0f1540; border:1px solid #1b224a; color:var(--text); border-radius:999px; padding:6px 14px; font-weight:700; text-transform:uppercase; font-size:12px; letter-spacing:.5px; cursor:pointer; transition:.2s all}
+    .chip.active{background:var(--accent); color:#0b1020; border-color:transparent}
+    .chip-group{display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px}
 
     .stat{background:#0f1540; border:1px solid #1b224a; border-radius:14px; padding:12px 14px; min-width:140px}
     .stat .label{color:var(--muted); font-size:12px}
@@ -48,11 +51,43 @@
     .pill.cyan{background:#103749; border-color:#165b7a}
     .pill.purple{background:#2a1e44; border-color:#4c3c7a}
     .pill.red{background:#3b1216; border-color:#6d1f28}
+    .pill.yellow{background:#3a3212; border-color:#6b5a1a; color:#fef08a}
+    .pill.blue{background:#132f4a; border-color:#1d4c7d}
+    .pill.gray{background:#24283d; border-color:#353d5f}
 
     details summary{cursor:pointer; color:var(--muted)}
     .footer{margin-top:20px; color:var(--muted); font-size:12px}
     .k{color:#b6c3ff}
     .warn{color:var(--warn)}
+    .legend{display:flex; flex-wrap:wrap; gap:18px; margin:14px 0; padding:12px; background:#0f1540; border:1px solid #1b224a; border-radius:12px}
+    .legend-group{display:flex; gap:16px; flex-wrap:wrap; align-items:center}
+    .legend-item{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.6px}
+    .legend-dot{width:14px; height:14px; border-radius:3px}
+    .legend-dot.green{background:#22c55e}
+    .legend-dot.yellow{background:#facc15}
+    .legend-dot.red{background:#ef4444}
+    .legend-dot.blue{background:#38bdf8}
+    .legend-dot.gray{background:#6b7280}
+    .legend-dot.orange{background:#f97316}
+    .legend-dot.purple{background:#a855f7}
+    .table-actions{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px}
+    .subtotal-row{background:#10173f; font-weight:700}
+    .subtotal-row td{border-top:1px solid #1b224a}
+    .hidden{display:none !important}
+    .loading-indicator{position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#0b1020cc; backdrop-filter:blur(4px); z-index:9999; color:var(--text); font-weight:700; font-size:18px; letter-spacing:.5px}
+    .loading-indicator .spinner{width:28px; height:28px; border-radius:50%; border:3px solid #ffffff33; border-top-color:var(--accent); margin-right:12px; animation:spin 1s linear infinite}
+    .loading-indicator .label{display:flex; align-items:center}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    body.print-friendly aside{display:none !important}
+    body.print-friendly main .grid{grid-template-columns:1fr !important}
+    @media print{
+      body{background:#fff; color:#000}
+      header, aside{display:none !important}
+      main{margin:0; padding:0}
+      .card{box-shadow:none; border-radius:0; border:0}
+      table th, table td{border-color:#ccc}
+      .legend{background:#f5f5f5; border-color:#ddd}
+    }
   </style>
 </head>
 <body>
@@ -68,6 +103,10 @@
     </div>
   </header>
 
+  <div id="loading-indicator" class="loading-indicator hidden">
+    <div class="label"><span class="spinner"></span> Cargando…</div>
+  </div>
+
   <main>
     <div class="grid">
       <!-- Columna izquierda: Resumen y tabla -->
@@ -81,6 +120,11 @@
           <div class="stat">
             <div class="label">Ausencias</div>
             <div class="value" id="stat-ausencias">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">Programadas</div>
+            <div class="value" id="stat-programadas">–</div>
+            <div class="muted" style="font-size:12px" id="stat-en-curso">En curso: –</div>
           </div>
           <div class="stat">
             <div class="label">CAIT Gines</div>
@@ -110,16 +154,20 @@
         <div class="muted" style="font-weight:600; text-transform:uppercase; font-size:12px">Resumen mensual</div>
         <div class="row" style="margin-top:12px" id="month-stats">
           <div class="stat">
-            <div class="label">Sesiones mes</div>
-            <div class="value" id="stat-month-total">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">Dadas mes</div>
+            <div class="label">Dadas mes (45')</div>
             <div class="value" id="stat-month-dadas">–</div>
           </div>
           <div class="stat">
             <div class="label">Ausencias mes</div>
             <div class="value" id="stat-month-ausencias">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">Programadas mes</div>
+            <div class="value" id="stat-month-programadas">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">Otros mes</div>
+            <div class="value" id="stat-month-otros">–</div>
           </div>
           <div class="stat">
             <div class="label">% dadas</div>
@@ -137,16 +185,20 @@
         <div class="muted" style="font-weight:600; text-transform:uppercase; font-size:12px">Resumen anual</div>
         <div class="row" style="margin-top:12px" id="year-stats">
           <div class="stat">
-            <div class="label">Sesiones año</div>
-            <div class="value" id="stat-year-total">–</div>
-          </div>
-          <div class="stat">
-            <div class="label">Dadas año</div>
+            <div class="label">Dadas año (45')</div>
             <div class="value" id="stat-year-dadas">–</div>
           </div>
           <div class="stat">
             <div class="label">Ausencias año</div>
             <div class="value" id="stat-year-ausencias">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">Programadas año</div>
+            <div class="value" id="stat-year-programadas">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">Otros año</div>
+            <div class="value" id="stat-year-otros">–</div>
           </div>
           <div class="stat">
             <div class="label">% dadas</div>
@@ -217,6 +269,47 @@
         <button id="today-week" class="btn-ghost">Semana actual</button>
       </div>
 
+      <div class="muted" id="base-date-label" style="margin:6px 0 0"></div>
+
+      <div class="legend">
+        <div>
+          <div class="muted" style="font-size:11px; font-weight:700; letter-spacing:.6px; text-transform:uppercase">Estados</div>
+          <div class="legend-group">
+            <div class="legend-item"><span class="legend-dot green"></span>Dada</div>
+            <div class="legend-item"><span class="legend-dot yellow"></span>Programada</div>
+            <div class="legend-item"><span class="legend-dot blue"></span>En curso</div>
+            <div class="legend-item"><span class="legend-dot red"></span>Ausencia</div>
+            <div class="legend-item"><span class="legend-dot gray"></span>Otros</div>
+          </div>
+        </div>
+        <div>
+          <div class="muted" style="font-size:11px; font-weight:700; letter-spacing:.6px; text-transform:uppercase">Centros</div>
+          <div class="legend-group">
+            <div class="legend-item"><span class="legend-dot green"></span>Gines</div>
+            <div class="legend-item"><span class="legend-dot orange"></span>Bormujos</div>
+            <div class="legend-item"><span class="legend-dot purple"></span>Privado</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chip-group" id="status-filters">
+        <button class="chip" data-key="dada">Dadas</button>
+        <button class="chip" data-key="programada">Programadas</button>
+        <button class="chip" data-key="ausencia">Ausencias</button>
+        <button class="chip" data-key="otro">Otros</button>
+      </div>
+
+      <div class="chip-group" id="center-filters">
+        <button class="chip" data-key="gines">Gines</button>
+        <button class="chip" data-key="bormujos">Bormujos</button>
+        <button class="chip" data-key="privado">Privado</button>
+      </div>
+
+      <div class="table-actions">
+        <button id="export-csv" class="btn-ghost">Exportar CSV</button>
+        <button id="print-view" class="btn-ghost">Imprimir vista</button>
+      </div>
+
       <div style="overflow:auto; margin-top:8px">
         <table id="events-table">
           <thead>
@@ -284,21 +377,42 @@
       clientId: localStorage.getItem('clientId') || ''
     };
 
+    const storedWeekStartIso = localStorage.getItem('weekStartISO') || '';
+
     const weekPicker = $('#week-picker');
-    const monthTotalEl = $('#stat-month-total');
+    const weekDadasEl = $('#stat-dadas');
+    const weekAusenciasEl = $('#stat-ausencias');
+    const weekProgramadasEl = $('#stat-programadas');
+    const weekEnCursoEl = $('#stat-en-curso');
+    const weekOtrosEl = $('#stat-otros');
+    const weekGinesEl = $('#stat-gines');
+    const weekBormujosEl = $('#stat-bormujos');
+    const weekPrivadoEl = $('#stat-privado');
+    const minutesLabelEl = $('#minutes-label');
+    const pctLabelEl = $('#pct-label');
+    const progressBarEl = $('#progress-bar');
     const monthDadasEl = $('#stat-month-dadas');
     const monthAusenciasEl = $('#stat-month-ausencias');
+    const monthProgramadasEl = $('#stat-month-programadas');
+    const monthOtrosEl = $('#stat-month-otros');
     const monthPctEl = $('#stat-month-pct');
     const monthOccupancyEl = $('#stat-month-occupancy');
     const monthLabelEl = $('#month-label');
     const monthMinutesLabelEl = $('#month-occupancy-label');
-    const yearTotalEl = $('#stat-year-total');
     const yearDadasEl = $('#stat-year-dadas');
     const yearAusenciasEl = $('#stat-year-ausencias');
+    const yearProgramadasEl = $('#stat-year-programadas');
+    const yearOtrosEl = $('#stat-year-otros');
     const yearPctEl = $('#stat-year-pct');
     const yearOccupancyEl = $('#stat-year-occupancy');
     const yearLabelEl = $('#year-label');
     const yearMinutesLabelEl = $('#year-occupancy-label');
+    const baseDateLabelEl = $('#base-date-label');
+    const loadingIndicatorEl = $('#loading-indicator');
+    const statusFiltersEl = $('#status-filters');
+    const centerFiltersEl = $('#center-filters');
+    const exportCsvBtn = $('#export-csv');
+    const printViewBtn = $('#print-view');
 
     const FALLBACK_SESSION_REGEX = /^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$/i;
 
@@ -318,6 +432,29 @@
         return FALLBACK_SESSION_REGEX;
       }
     })();
+
+    const STATUS_FILTER_MAP = {
+      dada: ['dada'],
+      programada: ['programada', 'en_curso'],
+      ausencia: ['ausencia'],
+      otro: ['otro']
+    };
+    const CENTER_FILTER_KEYS = ['gines','bormujos','privado'];
+    let activeStatusFilters = new Set(['dada','ausencia']);
+    let activeCenterFilters = new Set(CENTER_FILTER_KEYS);
+    let processedWeekEvents = [];
+    let filteredWeekEvents = [];
+    let loadingCounter = 0;
+
+    function showLoading(){
+      loadingCounter++;
+      if(loadingIndicatorEl){ loadingIndicatorEl.classList.remove('hidden'); }
+    }
+
+    function hideLoading(){
+      loadingCounter = Math.max(0, loadingCounter - 1);
+      if(loadingCounter === 0 && loadingIndicatorEl){ loadingIndicatorEl.classList.add('hidden'); }
+    }
 
     function formatDateInputValue(date){
       const d = new Date(date);
@@ -398,7 +535,10 @@
       const start = week.start;
       const end = new Date(week.end - 1);
       $('#week-label').textContent = `Del ${fmtDate(start)} al ${fmtDate(end)}`;
-      $('#range-label').textContent = `Consultando de ${fmtDate(start)} 00:00 a ${fmtDate(end)} 23:59 (${TZ})`;
+      $('#range-label').textContent = `Consulta semanal (timeMin/timeMax): ${week.start.toISOString()} → ${week.end.toISOString()}`;
+      if(baseDateLabelEl){
+        baseDateLabelEl.textContent = `Rango local: ${fmtDate(start)} 00:00 → ${fmtDate(end)} 23:59 (${TZ})`;
+      }
       if(weekPicker){ weekPicker.value = formatDateInputValue(start); }
     }
 
@@ -408,9 +548,11 @@
       if(week && week.start.getTime() === newWeek.start.getTime()){ // sin cambios reales
         week = newWeek;
         updateWeekUI();
+        localStorage.setItem('weekStartISO', week.start.toISOString());
         return;
       }
       week = newWeek;
+      localStorage.setItem('weekStartISO', week.start.toISOString());
       updateWeekUI();
       monthSummaryToken++;
       yearSummaryToken++;
@@ -427,9 +569,10 @@
     }
 
     function resetMonthSummary(text='—'){
-      monthTotalEl.textContent = '–';
       monthDadasEl.textContent = '–';
       monthAusenciasEl.textContent = '–';
+      monthProgramadasEl.textContent = '–';
+      monthOtrosEl.textContent = '–';
       monthPctEl.textContent = '–';
       monthOccupancyEl.textContent = '–';
       monthLabelEl.textContent = text;
@@ -437,9 +580,10 @@
     }
 
     function setMonthSummaryLoading(range){
-      monthTotalEl.textContent = '…';
       monthDadasEl.textContent = '…';
       monthAusenciasEl.textContent = '…';
+      monthProgramadasEl.textContent = '…';
+      monthOtrosEl.textContent = '…';
       monthPctEl.textContent = '…';
       monthOccupancyEl.textContent = '…';
       monthLabelEl.textContent = range ? `Cargando ${formatMonthRangeText(range)}...` : 'Cargando resumen mensual...';
@@ -447,9 +591,10 @@
     }
 
     function resetYearSummary(text='—'){
-      yearTotalEl.textContent = '–';
       yearDadasEl.textContent = '–';
       yearAusenciasEl.textContent = '–';
+      yearProgramadasEl.textContent = '–';
+      yearOtrosEl.textContent = '–';
       yearPctEl.textContent = '–';
       yearOccupancyEl.textContent = '–';
       yearLabelEl.textContent = text;
@@ -457,9 +602,10 @@
     }
 
     function setYearSummaryLoading(range){
-      yearTotalEl.textContent = '…';
       yearDadasEl.textContent = '…';
       yearAusenciasEl.textContent = '…';
+      yearProgramadasEl.textContent = '…';
+      yearOtrosEl.textContent = '…';
       yearPctEl.textContent = '…';
       yearOccupancyEl.textContent = '…';
       yearLabelEl.textContent = range ? `Cargando ${formatYearRangeText(range)}...` : 'Cargando resumen anual...';
@@ -476,7 +622,8 @@
     $('#clientId').value = cfg.clientId;
     $('#rules-json').textContent = JSON.stringify(cfg.rules, null, 2);
 
-    week = getWeekRange();
+    const initialWeekDate = storedWeekStartIso ? new Date(storedWeekStartIso) : new Date();
+    week = getWeekRange(Number.isNaN(initialWeekDate.getTime()) ? new Date() : initialWeekDate);
     updateWeekUI();
     resetMonthSummary();
     resetYearSummary();
@@ -500,6 +647,7 @@
 
     async function loadCalendars(){
       try{
+        showLoading();
         const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
           headers: { Authorization: `Bearer ${accessToken}` }
         });
@@ -515,13 +663,19 @@
           const opt = document.createElement('option');
           opt.value = c.id; opt.textContent = c.summary; sel.appendChild(opt);
         });
-        // Autoseleccionar "Andrea LG" si existe
-        const lg = calendars.find(c=> (c.summary||'').toLowerCase().includes('andrea lg'));
-        if(lg){ sel.value = lg.id; }
+        const persistedCalendarId = localStorage.getItem('selectedCalendarId');
+        if(persistedCalendarId && calendars.some(c=> c.id === persistedCalendarId)){
+          sel.value = persistedCalendarId;
+        }else{
+          const lg = calendars.find(c=> (c.summary||'').toLowerCase().includes('andrea lg'));
+          if(lg){ sel.value = lg.id; }
+        }
         if(calendars.length){ loadWeek(); }
       }catch(err){
         console.error(err);
         alert('No se pudieron cargar los calendarios. Revisa la consola para más detalles.');
+      }finally{
+        hideLoading();
       }
     }
 
@@ -655,72 +809,206 @@
       return null;
     }
 
-    function renderMonthSummary(events, range){
-      let dadas = 0;
-      let ausencias = 0;
+    function capitalize(word){
+      if(!word) return '';
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    }
 
+    function estadoLabelFromKey(key){
+      switch(key){
+        case 'dada': return 'Dada';
+        case 'programada': return 'Programada';
+        case 'en_curso': return 'En curso';
+        case 'ausencia': return 'Ausencia';
+        default: return 'Otro';
+      }
+    }
+
+    function estadoPillClass(key){
+      switch(key){
+        case 'dada': return 'green';
+        case 'programada': return 'yellow';
+        case 'en_curso': return 'blue';
+        case 'ausencia': return 'red';
+        default: return 'gray';
+      }
+    }
+
+    function centroPillClassFromKey(key){
+      if(key === 'gines') return 'green';
+      if(key === 'bormujos') return 'orange';
+      if(key === 'privado') return 'purple';
+      return 'gray';
+    }
+
+    function processEventsCollection(events, now = new Date()){
+      const processed = [];
       events.forEach(ev=>{
-        if(isExcluirTotal(ev)) return;
-        const sp = sessionParse(ev);
-        if(!sp) return;
-        if(sp.absent) ausencias++;
-        else dadas++;
+        const analyzed = analyzeEvent(ev, now);
+        if(analyzed){ processed.push(analyzed); }
       });
+      return processed;
+    }
 
-      const total = dadas + ausencias;
-      const sessionMinutes = dadas * MINUTES_PER_SESSION;
+    function summarizeProcessedEvents(list){
+      const summary = {
+        dadas: 0,
+        ausencias: 0,
+        programadas: 0,
+        enCurso: 0,
+        otros: 0,
+        gines: 0,
+        bormujos: 0,
+        privado: 0,
+        totalMinutes: 0
+      };
+      list.forEach(item=>{
+        summary.totalMinutes += item.mins;
+        switch(item.estadoKey){
+          case 'dada':
+            summary.dadas++;
+            if(item.centroKey === 'gines') summary.gines++;
+            else if(item.centroKey === 'bormujos') summary.bormujos++;
+            else if(item.centroKey === 'privado') summary.privado++;
+            break;
+          case 'ausencia':
+            summary.ausencias++;
+            break;
+          case 'programada':
+            summary.programadas++;
+            break;
+          case 'en_curso':
+            summary.enCurso++;
+            break;
+          default:
+            summary.otros++;
+        }
+      });
+      summary.totalEventos = summary.dadas + summary.ausencias + summary.programadas + summary.enCurso + summary.otros;
+      summary.sessionMinutes = summary.dadas * MINUTES_PER_SESSION;
+      return summary;
+    }
+
+    function analyzeEvent(ev, now = new Date()){
+      if(isExcluirTotal(ev)) return null;
+      const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
+      const end = new Date(ev.end.dateTime || (ev.end.date + 'T23:59:59'));
+      const mins = durationMinutes(ev);
+      const title = (ev.summary||'').trim();
+      const sp = sessionParse(ev);
+      let estadoKey = 'otro';
+      let tipo = 'otro';
+      let centroKey = null;
+      let centroDisplay = '—';
+
+      if(sp){
+        tipo = 'sesión';
+        const centroRaw = sp.centro || '';
+        const normalized = (centroRaw || '').toLowerCase();
+        if(CENTER_FILTER_KEYS.includes(normalized)){
+          centroKey = normalized;
+          centroDisplay = capitalize(normalized);
+        }else{
+          centroDisplay = centroRaw && centroRaw !== '—' ? centroRaw : '—';
+        }
+        if(sp.absent){
+          estadoKey = 'ausencia';
+        }else if(end <= now){
+          estadoKey = 'dada';
+        }else if(start > now){
+          estadoKey = 'programada';
+        }else{
+          estadoKey = 'en_curso';
+        }
+      }else if(isBloqueHorario(ev)){
+        tipo = 'bloque';
+        estadoKey = 'otro';
+      }else if(isOtroPorKeyword(ev)){
+        tipo = 'otro';
+        estadoKey = 'otro';
+      }else{
+        tipo = 'otro';
+        estadoKey = 'otro';
+      }
+
+      return {
+        raw: ev,
+        title: title || '(sin título)',
+        start,
+        end,
+        mins,
+        tipo,
+        estadoKey,
+        estadoLabel: estadoLabelFromKey(estadoKey),
+        estadoClass: estadoPillClass(estadoKey),
+        centroKey,
+        centroLabel: centroDisplay,
+        centroClass: centroPillClassFromKey(centroKey),
+        isAllDay: Boolean(ev.start.date),
+      };
+    }
+
+    function renderMonthSummary(events, range){
+      const processed = processEventsCollection(events, new Date());
+      const summary = summarizeProcessedEvents(processed);
+      const totalSesiones = summary.dadas + summary.ausencias;
       const availableMinutes = minutesAvailableForRange(range);
-      const occupancy = computeOccupancyPercent(sessionMinutes, availableMinutes);
+      const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
+      const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
 
-      monthTotalEl.textContent = String(total);
-      monthDadasEl.textContent = String(dadas);
-      monthAusenciasEl.textContent = String(ausencias);
-      monthPctEl.textContent = total>0 ? `${Math.round((dadas/total)*100)}%` : '–';
+      monthDadasEl.textContent = String(summary.dadas);
+      monthAusenciasEl.textContent = String(summary.ausencias);
+      monthProgramadasEl.textContent = programadasTexto;
+      monthOtrosEl.textContent = String(summary.otros);
+      const pct = totalSesiones > 0 ? (summary.dadas / totalSesiones) * 100 : null;
+      monthPctEl.textContent = formatPercent(pct);
       monthOccupancyEl.textContent = formatPercent(occupancy);
-      monthLabelEl.textContent = formatMonthRangeText(range);
-      monthMinutesLabelEl.textContent = availableMinutes > 0 ? formatMinutesPair(sessionMinutes, availableMinutes) : '—';
+      const extras = summary.totalEventos > 0 ? ` · Total eventos: ${summary.totalEventos}` : '';
+      const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
+      monthLabelEl.textContent = `${formatMonthRangeText(range)}${extras}${enCursoText}`;
+      monthMinutesLabelEl.textContent = availableMinutes > 0 ? formatMinutesPair(summary.sessionMinutes, availableMinutes) : '—';
     }
 
     function renderYearSummary(events, range){
-      let dadas = 0;
-      let ausencias = 0;
-
-      events.forEach(ev=>{
-        if(isExcluirTotal(ev)) return;
-        const sp = sessionParse(ev);
-        if(!sp) return;
-        if(sp.absent) ausencias++;
-        else dadas++;
-      });
-
-      const total = dadas + ausencias;
-      const sessionMinutes = dadas * MINUTES_PER_SESSION;
+      const processed = processEventsCollection(events, new Date());
+      const summary = summarizeProcessedEvents(processed);
+      const totalSesiones = summary.dadas + summary.ausencias;
       const availableMinutes = minutesAvailableForRange(range);
-      const occupancy = computeOccupancyPercent(sessionMinutes, availableMinutes);
+      const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
+      const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
 
-      yearTotalEl.textContent = String(total);
-      yearDadasEl.textContent = String(dadas);
-      yearAusenciasEl.textContent = String(ausencias);
-      yearPctEl.textContent = total>0 ? `${Math.round((dadas/total)*100)}%` : '–';
+      yearDadasEl.textContent = String(summary.dadas);
+      yearAusenciasEl.textContent = String(summary.ausencias);
+      yearProgramadasEl.textContent = programadasTexto;
+      yearOtrosEl.textContent = String(summary.otros);
+      const pct = totalSesiones > 0 ? (summary.dadas / totalSesiones) * 100 : null;
+      yearPctEl.textContent = formatPercent(pct);
       yearOccupancyEl.textContent = formatPercent(occupancy);
-      yearLabelEl.textContent = formatYearRangeText(range);
-      yearMinutesLabelEl.textContent = availableMinutes > 0 ? formatMinutesPair(sessionMinutes, availableMinutes) : '—';
+      const extras = summary.totalEventos > 0 ? ` · Total eventos: ${summary.totalEventos}` : '';
+      const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
+      yearLabelEl.textContent = `${formatYearRangeText(range)}${extras}${enCursoText}`;
+      yearMinutesLabelEl.textContent = availableMinutes > 0 ? formatMinutesPair(summary.sessionMinutes, availableMinutes) : '—';
     }
 
     // ======== CARGA DE EVENTOS ========
     async function fetchEventsForRange(calId, range){
-      const params = new URLSearchParams({
-        singleEvents: 'true', orderBy: 'startTime', timeZone: TZ,
-        timeMin: range.start.toISOString(), timeMax: range.end.toISOString(), maxResults: '2500'
-      });
-      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?${params.toString()}`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }});
-      if(!res.ok){
-        const msg = await res.text();
-        throw new Error(`Error cargando eventos (${res.status}): ${msg}`);
+      showLoading();
+      try{
+        const params = new URLSearchParams({
+          singleEvents: 'true', orderBy: 'startTime', timeZone: TZ,
+          timeMin: range.start.toISOString(), timeMax: range.end.toISOString(), maxResults: '2500'
+        });
+        const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?${params.toString()}`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }});
+        if(!res.ok){
+          const msg = await res.text();
+          throw new Error(`Error cargando eventos (${res.status}): ${msg}`);
+        }
+        const data = await res.json();
+        return (data.items||[]).filter(e=> !e.status || e.status!=='cancelled');
+      }finally{
+        hideLoading();
       }
-      const data = await res.json();
-      return (data.items||[]).filter(e=> !e.status || e.status!=='cancelled');
     }
 
     async function loadMonthSummary(calId){
@@ -759,6 +1047,7 @@
 
     async function loadWeek(){
       const calId = $('#calendar-select').value || 'primary';
+      localStorage.setItem('selectedCalendarId', calId);
       monthSummaryToken++;
       yearSummaryToken++;
       if(week){
@@ -787,90 +1076,217 @@
 
     // ======== RENDER ========
     function render(events){
-      const tbody = $('#events-table tbody');
-      tbody.innerHTML = '';
+      const now = new Date();
+      processedWeekEvents = processEventsCollection(events, now);
+      const summary = summarizeProcessedEvents(processedWeekEvents);
+      updateWeeklyStats(summary);
+      applyFilters();
+    }
 
-      let dadas=0, ausencias=0, otros=0, gines=0, bormujos=0, privado=0;
-      let minutosSesionDadas = 0; // siempre 45' por sesión dada
-
-      events.forEach(ev=>{
-        const title = (ev.summary||'').trim();
-        if(isExcluirTotal(ev)) return; // ni contar ni listar
-
-        const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
-        const end   = new Date(ev.end.dateTime   || (ev.end.date   + 'T23:59:59'));
-        const mins  = durationMinutes(ev);
-
-        let tipo='otro';
-        let estado='—';
-        let centro='—';
-
-        const sp = sessionParse(ev);
-        if(sp){
-          tipo = 'sesión';
-          estado = sp.absent ? 'ausencia' : 'dada';
-          centro = sp.centro || '—';
-          if(sp.absent){
-            ausencias++;
-          }else{
-            dadas++;
-            minutosSesionDadas += MINUTES_PER_SESSION; // fijo por requerimiento
-            if(centro==='gines') gines++;
-            else if(centro==='bormujos') bormujos++;
-            else if(centro==='privado') privado++;
-          }
-        }else if(isBloqueHorario(ev)){
-          tipo = 'bloque';
-          estado = '—';
-        }else if(isOtroPorKeyword(ev)){
-          tipo = 'otro';
-          otros++;
-        }else{
-          // Si no encaja en nada, lo marcamos como otros, pero lo listamos
-          tipo = 'otro';
-          otros++;
-        }
-
-        const centroPillClass = centro==='gines' ? 'green' : centro==='bormujos' ? 'orange' : centro==='privado' ? 'purple' : 'cyan';
-        const estadoPillClass = estado==='dada' ? 'green' : estado==='ausencia' ? 'red' : 'cyan';
-
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${fmtDate(start)}</td>
-          <td>${ev.start.date ? '—' : fmtTime(start)}</td>
-          <td>${ev.end.date ? '—' : fmtTime(end)}</td>
-          <td>${title || '<span class="muted">(sin título)</span>'}</td>
-          <td><span class="pill ${centroPillClass}">${centro}</span></td>
-          <td><span class="pill ${estadoPillClass}">${estado}</span></td>
-          <td>${tipo}</td>
-          <td>${mins} min</td>`;
-        tbody.appendChild(tr);
-      });
-
-      if(!tbody.children.length){
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td colspan="8" class="muted">No hay eventos que mostrar con las reglas actuales.</td>`;
-        tbody.appendChild(tr);
-      }
-
-      // Estadísticas
-      $('#stat-dadas').textContent = String(dadas);
-      $('#stat-ausencias').textContent = String(ausencias);
-      $('#stat-otros').textContent = String(otros);
-      $('#stat-gines').textContent = String(gines);
-      $('#stat-bormujos').textContent = String(bormujos);
-      $('#stat-privado').textContent = String(privado);
-
-      const available = Number(cfg.minutesAvailable)||0; // por defecto 2310 (38.5h)
-      const occupancy = computeOccupancyPercent(minutosSesionDadas, available);
+    function updateWeeklyStats(summary){
+      if(weekDadasEl) weekDadasEl.textContent = String(summary.dadas);
+      if(weekAusenciasEl) weekAusenciasEl.textContent = String(summary.ausencias);
+      if(weekProgramadasEl) weekProgramadasEl.textContent = String(summary.programadas);
+      if(weekEnCursoEl) weekEnCursoEl.textContent = `En curso: ${summary.enCurso}`;
+      if(weekOtrosEl) weekOtrosEl.textContent = String(summary.otros);
+      if(weekGinesEl) weekGinesEl.textContent = String(summary.gines);
+      if(weekBormujosEl) weekBormujosEl.textContent = String(summary.bormujos);
+      if(weekPrivadoEl) weekPrivadoEl.textContent = String(summary.privado);
+      const available = Number(cfg.minutesAvailable)||0;
+      const occupancy = computeOccupancyPercent(summary.sessionMinutes, available);
       const pctText = formatPercent(occupancy);
       const pctForBar = occupancy == null ? 0 : Math.max(0, Math.min(100, occupancy));
-      $('#minutes-label').textContent = formatMinutesPair(minutosSesionDadas, available);
-      $('#pct-label').textContent = pctText;
-      $('#progress-bar').style.width = pctForBar + '%';
+      if(minutesLabelEl) minutesLabelEl.textContent = formatMinutesPair(summary.sessionMinutes, available);
+      if(pctLabelEl) pctLabelEl.textContent = pctText;
+      if(progressBarEl) progressBarEl.style.width = pctForBar + '%';
+    }
+
+    function statusMatches(item){
+      if(activeStatusFilters.size === 0) return true;
+      for(const key of activeStatusFilters){
+        const states = STATUS_FILTER_MAP[key] || [key];
+        if(states.includes(item.estadoKey)){ return true; }
+      }
+      return false;
+    }
+
+    function centerMatches(item){
+      if(activeCenterFilters.size === 0) return true;
+      if(!item.centroKey) return true;
+      return activeCenterFilters.has(item.centroKey);
+    }
+
+    function applyFilters(){
+      if(!Array.isArray(processedWeekEvents)){ processedWeekEvents = []; }
+      const filtered = processedWeekEvents.filter(item=> statusMatches(item) && centerMatches(item));
+      filteredWeekEvents = filtered;
+      renderTableRows(filtered);
+    }
+
+    function renderTableRows(list){
+      const tbody = $('#events-table tbody');
+      tbody.innerHTML = '';
+      if(!list.length){
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 8;
+        td.className = 'muted';
+        td.textContent = 'No hay eventos que mostrar con las reglas actuales.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+      }else{
+        list.forEach(item=>{
+          const tr = document.createElement('tr');
+
+          const tdFecha = document.createElement('td');
+          tdFecha.textContent = fmtDate(item.start);
+          tr.appendChild(tdFecha);
+
+          const tdInicio = document.createElement('td');
+          tdInicio.textContent = item.isAllDay ? '—' : fmtTime(item.start);
+          tr.appendChild(tdInicio);
+
+          const tdFin = document.createElement('td');
+          tdFin.textContent = item.isAllDay ? '—' : fmtTime(item.end);
+          tr.appendChild(tdFin);
+
+          const tdTitulo = document.createElement('td');
+          tdTitulo.textContent = item.title;
+          tr.appendChild(tdTitulo);
+
+          const tdCentro = document.createElement('td');
+          const centroSpan = document.createElement('span');
+          centroSpan.className = `pill ${item.centroClass}`;
+          centroSpan.textContent = item.centroLabel || '—';
+          tdCentro.appendChild(centroSpan);
+          tr.appendChild(tdCentro);
+
+          const tdEstado = document.createElement('td');
+          const estadoSpan = document.createElement('span');
+          estadoSpan.className = `pill ${item.estadoClass}`;
+          estadoSpan.textContent = item.estadoLabel;
+          tdEstado.appendChild(estadoSpan);
+          tr.appendChild(tdEstado);
+
+          const tdTipo = document.createElement('td');
+          tdTipo.textContent = capitalize(item.tipo);
+          tr.appendChild(tdTipo);
+
+          const tdDuracion = document.createElement('td');
+          tdDuracion.textContent = `${item.mins} min`;
+          tr.appendChild(tdDuracion);
+
+          tbody.appendChild(tr);
+        });
+      }
+
+      const subtotal = summarizeProcessedEvents(list);
+      const subtotalRow = document.createElement('tr');
+      subtotalRow.className = 'subtotal-row';
+      const cell1 = document.createElement('td');
+      cell1.colSpan = 4;
+      cell1.textContent = 'Subtotal (filtro actual)';
+      const cell2 = document.createElement('td');
+      cell2.colSpan = 2;
+      cell2.textContent = `Dadas: ${subtotal.dadas} · Programadas: ${subtotal.programadas} · En curso: ${subtotal.enCurso}`;
+      const cell3 = document.createElement('td');
+      cell3.textContent = `Ausencias: ${subtotal.ausencias}`;
+      const cell4 = document.createElement('td');
+      cell4.textContent = `Min dadas: ${formatMinutes(subtotal.sessionMinutes)} · Min totales: ${formatMinutes(subtotal.totalMinutes)}`;
+      subtotalRow.appendChild(cell1);
+      subtotalRow.appendChild(cell2);
+      subtotalRow.appendChild(cell3);
+      subtotalRow.appendChild(cell4);
+      tbody.appendChild(subtotalRow);
+    }
+
+    function syncFilterChips(){
+      if(statusFiltersEl){
+        statusFiltersEl.querySelectorAll('.chip').forEach(btn=>{
+          const key = btn.dataset.key;
+          if(!key) return;
+          if(activeStatusFilters.has(key)) btn.classList.add('active');
+          else btn.classList.remove('active');
+        });
+      }
+      if(centerFiltersEl){
+        centerFiltersEl.querySelectorAll('.chip').forEach(btn=>{
+          const key = btn.dataset.key;
+          if(!key) return;
+          if(activeCenterFilters.has(key)) btn.classList.add('active');
+          else btn.classList.remove('active');
+        });
+      }
+    }
+
+    syncFilterChips();
+    applyFilters();
+
+    function exportWeekToCsv(){
+      if(!filteredWeekEvents.length){
+        alert('No hay eventos para exportar con el filtro actual.');
+        return;
+      }
+      const rows = [['Fecha','Inicio','Fin','Título','Centro','Estado','Tipo','Duración (min)']];
+      filteredWeekEvents.forEach(item=>{
+        rows.push([
+          fmtDate(item.start),
+          item.isAllDay ? '—' : fmtTime(item.start),
+          item.isAllDay ? '—' : fmtTime(item.end),
+          item.title,
+          item.centroLabel || '—',
+          item.estadoLabel,
+          capitalize(item.tipo),
+          String(item.mins)
+        ]);
+      });
+      const csv = rows
+        .map(cols=> cols.map(val=>`"${String(val??'').replace(/"/g,'""')}"`).join(','))
+        .join('\r\n');
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const link = document.createElement('a');
+      const startLabel = week ? formatDateInputValue(week.start) : formatDateInputValue(new Date());
+      link.href = URL.createObjectURL(blob);
+      link.download = `sesiones_${startLabel || 'semana'}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    }
+
+    function triggerPrintView(){
+      document.body.classList.add('print-friendly');
+      setTimeout(()=>{ window.print(); }, 50);
+      setTimeout(()=> document.body.classList.remove('print-friendly'), 1000);
     }
 
     // ======== EVENTOS UI ========
+    statusFiltersEl?.addEventListener('click', (event)=>{
+      const btn = event.target.closest('.chip');
+      if(!btn) return;
+      const key = btn.dataset.key;
+      if(!key) return;
+      if(activeStatusFilters.has(key)) activeStatusFilters.delete(key);
+      else activeStatusFilters.add(key);
+      syncFilterChips();
+      applyFilters();
+    });
+
+    centerFiltersEl?.addEventListener('click', (event)=>{
+      const btn = event.target.closest('.chip');
+      if(!btn) return;
+      const key = btn.dataset.key;
+      if(!key) return;
+      if(activeCenterFilters.has(key)) activeCenterFilters.delete(key);
+      else activeCenterFilters.add(key);
+      syncFilterChips();
+      applyFilters();
+    });
+
+    exportCsvBtn?.addEventListener('click', exportWeekToCsv);
+    printViewBtn?.addEventListener('click', triggerPrintView);
+    window.addEventListener('afterprint', ()=> document.body.classList.remove('print-friendly'));
+
     $('#signin').addEventListener('click', ()=>{
       localStorage.setItem('clientId', $('#clientId').value.trim());
       initTokenClient();
@@ -886,6 +1302,11 @@
       }
     });
     $('#load-week').addEventListener('click', ()=>{ if(!accessToken) return alert('Conéctate primero'); loadWeek(); });
+    $('#calendar-select')?.addEventListener('change', (event)=>{
+      const value = event.target.value;
+      if(value) localStorage.setItem('selectedCalendarId', value);
+      if(accessToken){ loadWeek(); }
+    });
     $('#prev-week')?.addEventListener('click', ()=> changeWeekBy(-7));
     $('#next-week')?.addEventListener('click', ()=> changeWeekBy(7));
     $('#today-week')?.addEventListener('click', ()=> setWeekFromDate(new Date()));
@@ -897,14 +1318,28 @@
 
     $('#save-cfg').addEventListener('click', ()=>{
       const m = Number($('#cfg-minutes').value||0);
-      cfg.minutesAvailable = m; localStorage.setItem('minutesAvailable', String(m));
-      if($('#events-table tbody').children.length) $('#refresh').click();
+      cfg.minutesAvailable = m;
+      localStorage.setItem('minutesAvailable', String(m));
+      if(processedWeekEvents.length){
+        updateWeeklyStats(summarizeProcessedEvents(processedWeekEvents));
+      }
     });
 
     $('#save-rules').addEventListener('click', ()=>{
       try{
         const json = JSON.parse($('#rules-json').textContent);
-        cfg.rules = json; localStorage.setItem('rules', JSON.stringify(json));
+        if(typeof json.pattern_sesion === 'string' && json.pattern_sesion.trim()){
+          try{
+            new RegExp(json.pattern_sesion, 'i');
+          }catch(err){
+            alert('Patrón inválido');
+            return;
+          }
+        }
+        cfg.rules = json;
+        localStorage.setItem('rules', JSON.stringify(json));
+        SESSION_REGEX_CACHE.pattern = null;
+        SESSION_REGEX_CACHE.regex = DEFAULT_SESSION_REGEX;
         alert('Reglas guardadas. Recarga la semana para aplicar cambios.');
       }catch(e){ alert('JSON inválido en las reglas'); }
     });
@@ -913,6 +1348,8 @@
       cfg.rules = cloneRules(DEFAULT_RULES);
       $('#rules-json').textContent = JSON.stringify(cfg.rules, null, 2);
       localStorage.removeItem('rules');
+      SESSION_REGEX_CACHE.pattern = null;
+      SESSION_REGEX_CACHE.regex = DEFAULT_SESSION_REGEX;
       alert('Reglas restauradas. Recarga la semana para aplicar cambios.');
     });
 
