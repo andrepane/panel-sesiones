@@ -125,8 +125,40 @@
             <div class="label">% dadas</div>
             <div class="value" id="stat-month-pct">–</div>
           </div>
+          <div class="stat">
+            <div class="label">% horario (38,5h)</div>
+            <div class="value" id="stat-month-occupancy">–</div>
+          </div>
         </div>
         <div class="muted" id="month-label">—</div>
+        <div class="muted" id="month-occupancy-label">—</div>
+
+        <div style="border-top:1px solid #1b224a; margin:18px 0 12px"></div>
+        <div class="muted" style="font-weight:600; text-transform:uppercase; font-size:12px">Resumen anual</div>
+        <div class="row" style="margin-top:12px" id="year-stats">
+          <div class="stat">
+            <div class="label">Sesiones año</div>
+            <div class="value" id="stat-year-total">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">Dadas año</div>
+            <div class="value" id="stat-year-dadas">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">Ausencias año</div>
+            <div class="value" id="stat-year-ausencias">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">% dadas</div>
+            <div class="value" id="stat-year-pct">–</div>
+          </div>
+          <div class="stat">
+            <div class="label">% horario (38,5h)</div>
+            <div class="value" id="stat-year-occupancy">–</div>
+          </div>
+        </div>
+        <div class="muted" id="year-label">—</div>
+        <div class="muted" id="year-occupancy-label">—</div>
       </section>
 
       <!-- Columna derecha: Configuración -->
@@ -211,6 +243,7 @@
     const fmtDate = (d)=> d.toLocaleDateString('es-ES', { timeZone: TZ });
     const fmtTime = (d)=> d.toLocaleTimeString('es-ES', { timeZone: TZ, hour:'2-digit', minute:'2-digit' });
     const fmtMonthYear = (d)=> d.toLocaleDateString('es-ES', { timeZone: TZ, month: 'long', year: 'numeric' });
+    const fmtYear = (d)=> d.toLocaleDateString('es-ES', { timeZone: TZ, year: 'numeric' });
 
     function getWeekRange(baseDate=new Date()){
       const d = new Date(baseDate);
@@ -233,6 +266,16 @@
       return {start, end};
     }
 
+    function getYearRange(baseDate=new Date()){
+      const d = new Date(baseDate);
+      d.setHours(0,0,0,0);
+      d.setMonth(0, 1);
+      const start = new Date(d);
+      const end = new Date(start);
+      end.setFullYear(end.getFullYear() + 1);
+      return {start, end};
+    }
+
     // ======== ESTADO Y PERSISTENCIA ========
     const $ = (sel)=> document.querySelector(sel);
     const cfg = {
@@ -246,7 +289,16 @@
     const monthDadasEl = $('#stat-month-dadas');
     const monthAusenciasEl = $('#stat-month-ausencias');
     const monthPctEl = $('#stat-month-pct');
+    const monthOccupancyEl = $('#stat-month-occupancy');
     const monthLabelEl = $('#month-label');
+    const monthMinutesLabelEl = $('#month-occupancy-label');
+    const yearTotalEl = $('#stat-year-total');
+    const yearDadasEl = $('#stat-year-dadas');
+    const yearAusenciasEl = $('#stat-year-ausencias');
+    const yearPctEl = $('#stat-year-pct');
+    const yearOccupancyEl = $('#stat-year-occupancy');
+    const yearLabelEl = $('#year-label');
+    const yearMinutesLabelEl = $('#year-occupancy-label');
 
     const FALLBACK_SESSION_REGEX = /^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$/i;
 
@@ -289,9 +341,57 @@
       return `Mes de ${fmtMonthYear(range.start)} (${fmtDate(range.start)} - ${fmtDate(end)})`;
     }
 
+    function formatYearRangeText(range){
+      const end = new Date(range.end - 1);
+      return `Año ${fmtYear(range.start)} (${fmtDate(range.start)} - ${fmtDate(end)})`;
+    }
+
+    const MINUTES_PER_SESSION = 45;
+    const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
+
+    function minutesAvailableForRange(range){
+      const weeklyMinutes = Number(cfg.minutesAvailable) || 0;
+      if(!range || weeklyMinutes <= 0) return 0;
+      const diffMs = Math.max(0, range.end - range.start);
+      return weeklyMinutes * (diffMs / WEEK_IN_MS);
+    }
+
+    function computeOccupancyPercent(minutesUsed, minutesAvailable){
+      if(!Number.isFinite(minutesUsed) || !Number.isFinite(minutesAvailable) || minutesAvailable <= 0){
+        return null;
+      }
+      return (minutesUsed / minutesAvailable) * 100;
+    }
+
+    function formatPercent(value){
+      if(!Number.isFinite(value) || value < 0){
+        return '–';
+      }
+      const fixed = value.toFixed(1);
+      return `${fixed.replace(/\.0$/, '')}%`;
+    }
+
+    function formatMinutes(value){
+      if(!Number.isFinite(value) || value < 0) return '–';
+      const rounded = Math.round(value);
+      if(Math.abs(rounded - value) < 0.05){
+        return String(rounded);
+      }
+      return value.toFixed(1).replace(/\.0$/, '');
+    }
+
+    function formatMinutesPair(used, available){
+      const usedText = formatMinutes(used);
+      const availableText = (Number.isFinite(available) && available > 0) ? formatMinutes(available) : '–';
+      if(usedText === '–' && availableText === '–') return '—';
+      if(availableText === '–') return `${usedText} / – min`;
+      return `${usedText} / ${availableText} min`;
+    }
+
     let week = null;
     let weekRequestToken = 0;
     let monthSummaryToken = 0;
+    let yearSummaryToken = 0;
 
     function updateWeekUI(){
       if(!week) return;
@@ -313,7 +413,9 @@
       week = newWeek;
       updateWeekUI();
       monthSummaryToken++;
+      yearSummaryToken++;
       resetMonthSummary();
+      resetYearSummary();
       if(accessToken){ loadWeek(); }
     }
 
@@ -329,7 +431,9 @@
       monthDadasEl.textContent = '–';
       monthAusenciasEl.textContent = '–';
       monthPctEl.textContent = '–';
+      monthOccupancyEl.textContent = '–';
       monthLabelEl.textContent = text;
+      monthMinutesLabelEl.textContent = '—';
     }
 
     function setMonthSummaryLoading(range){
@@ -337,7 +441,29 @@
       monthDadasEl.textContent = '…';
       monthAusenciasEl.textContent = '…';
       monthPctEl.textContent = '…';
+      monthOccupancyEl.textContent = '…';
       monthLabelEl.textContent = range ? `Cargando ${formatMonthRangeText(range)}...` : 'Cargando resumen mensual...';
+      monthMinutesLabelEl.textContent = '…';
+    }
+
+    function resetYearSummary(text='—'){
+      yearTotalEl.textContent = '–';
+      yearDadasEl.textContent = '–';
+      yearAusenciasEl.textContent = '–';
+      yearPctEl.textContent = '–';
+      yearOccupancyEl.textContent = '–';
+      yearLabelEl.textContent = text;
+      yearMinutesLabelEl.textContent = '—';
+    }
+
+    function setYearSummaryLoading(range){
+      yearTotalEl.textContent = '…';
+      yearDadasEl.textContent = '…';
+      yearAusenciasEl.textContent = '…';
+      yearPctEl.textContent = '…';
+      yearOccupancyEl.textContent = '…';
+      yearLabelEl.textContent = range ? `Cargando ${formatYearRangeText(range)}...` : 'Cargando resumen anual...';
+      yearMinutesLabelEl.textContent = '…';
     }
 
     function cloneRules(rules){
@@ -353,6 +479,7 @@
     week = getWeekRange();
     updateWeekUI();
     resetMonthSummary();
+    resetYearSummary();
 
     // ======== AUTH (GIS Token Client) ========
     let tokenClient = null; let accessToken = null; let calendars = [];
@@ -541,11 +668,43 @@
       });
 
       const total = dadas + ausencias;
+      const sessionMinutes = dadas * MINUTES_PER_SESSION;
+      const availableMinutes = minutesAvailableForRange(range);
+      const occupancy = computeOccupancyPercent(sessionMinutes, availableMinutes);
+
       monthTotalEl.textContent = String(total);
       monthDadasEl.textContent = String(dadas);
       monthAusenciasEl.textContent = String(ausencias);
       monthPctEl.textContent = total>0 ? `${Math.round((dadas/total)*100)}%` : '–';
+      monthOccupancyEl.textContent = formatPercent(occupancy);
       monthLabelEl.textContent = formatMonthRangeText(range);
+      monthMinutesLabelEl.textContent = availableMinutes > 0 ? formatMinutesPair(sessionMinutes, availableMinutes) : '—';
+    }
+
+    function renderYearSummary(events, range){
+      let dadas = 0;
+      let ausencias = 0;
+
+      events.forEach(ev=>{
+        if(isExcluirTotal(ev)) return;
+        const sp = sessionParse(ev);
+        if(!sp) return;
+        if(sp.absent) ausencias++;
+        else dadas++;
+      });
+
+      const total = dadas + ausencias;
+      const sessionMinutes = dadas * MINUTES_PER_SESSION;
+      const availableMinutes = minutesAvailableForRange(range);
+      const occupancy = computeOccupancyPercent(sessionMinutes, availableMinutes);
+
+      yearTotalEl.textContent = String(total);
+      yearDadasEl.textContent = String(dadas);
+      yearAusenciasEl.textContent = String(ausencias);
+      yearPctEl.textContent = total>0 ? `${Math.round((dadas/total)*100)}%` : '–';
+      yearOccupancyEl.textContent = formatPercent(occupancy);
+      yearLabelEl.textContent = formatYearRangeText(range);
+      yearMinutesLabelEl.textContent = availableMinutes > 0 ? formatMinutesPair(sessionMinutes, availableMinutes) : '—';
     }
 
     // ======== CARGA DE EVENTOS ========
@@ -581,11 +740,30 @@
       }
     }
 
+    async function loadYearSummary(calId){
+      if(!week) return;
+      const yearRange = getYearRange(week.start);
+      const token = ++yearSummaryToken;
+      setYearSummaryLoading(yearRange);
+      try{
+        const events = await fetchEventsForRange(calId, yearRange);
+        if(token !== yearSummaryToken) return;
+        renderYearSummary(events, yearRange);
+      }catch(err){
+        if(token === yearSummaryToken){
+          console.error(err);
+          resetYearSummary('No se pudo cargar el resumen anual.');
+        }
+      }
+    }
+
     async function loadWeek(){
       const calId = $('#calendar-select').value || 'primary';
       monthSummaryToken++;
+      yearSummaryToken++;
       if(week){
         setMonthSummaryLoading(getMonthRange(week.start));
+        setYearSummaryLoading(getYearRange(week.start));
       }
       const token = ++weekRequestToken;
       try{
@@ -597,11 +775,13 @@
           console.error(err);
           alert('No se pudieron cargar los eventos de la semana. Revisa la consola para más detalles.');
           resetMonthSummary();
+          resetYearSummary();
         }
         return;
       }
       if(token === weekRequestToken){
         loadMonthSummary(calId);
+        loadYearSummary(calId);
       }
     }
 
@@ -634,7 +814,7 @@
             ausencias++;
           }else{
             dadas++;
-            minutosSesionDadas += 45; // fijo por requerimiento
+            minutosSesionDadas += MINUTES_PER_SESSION; // fijo por requerimiento
             if(centro==='gines') gines++;
             else if(centro==='bormujos') bormujos++;
             else if(centro==='privado') privado++;
@@ -682,10 +862,12 @@
       $('#stat-privado').textContent = String(privado);
 
       const available = Number(cfg.minutesAvailable)||0; // por defecto 2310 (38.5h)
-      const pct = available>0 ? Math.min(100, Math.round((minutosSesionDadas/available)*100)) : 0;
-      $('#minutes-label').textContent = `${minutosSesionDadas} / ${available} min`;
-      $('#pct-label').textContent = `${pct}%`;
-      $('#progress-bar').style.width = pct + '%';
+      const occupancy = computeOccupancyPercent(minutosSesionDadas, available);
+      const pctText = formatPercent(occupancy);
+      const pctForBar = occupancy == null ? 0 : Math.max(0, Math.min(100, occupancy));
+      $('#minutes-label').textContent = formatMinutesPair(minutosSesionDadas, available);
+      $('#pct-label').textContent = pctText;
+      $('#progress-bar').style.width = pctForBar + '%';
     }
 
     // ======== EVENTOS UI ========
