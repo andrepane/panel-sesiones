@@ -24,13 +24,16 @@
         <button id="today-week" class="btn-ghost">Semana actual</button>
       </div>
       <div class="auth-controls">
-        <input id="clientId" placeholder="Google OAuth CLIENT_ID" />
         <button id="signin" class="btn-primary">Conectar Google Calendar</button>
         <span id="gc-status" class="badge muted" role="status" aria-live="polite">Sin conexión</span>
         <button id="refresh" class="btn-ghost" title="Volver a cargar">↻</button>
       </div>
     </div>
   </header>
+
+  <p class="muted small-print" style="text-align:center;margin:8px auto;max-width:640px;">
+    Solo se solicita acceso de lectura a tu Google Calendar. No guardamos tus datos.
+  </p>
 
   <div id="loading-indicator" class="loading-indicator hidden">
     <div class="label"><span class="spinner"></span> Cargando…</div>
@@ -309,7 +312,7 @@
             <p class="muted help-text">Usa <strong>*</strong> al inicio del título para marcar una ausencia.</p>
           </div>
 
-          <p class="muted small-print">La aplicación únicamente solicita acceso de lectura a tu Google Calendar. Conecta tu Client ID para empezar.</p>
+          <p class="muted small-print">La aplicación únicamente solicita acceso de lectura a tu Google Calendar.</p>
         </section>
       </div>
     </section>

@@ -39,6 +39,8 @@ function getYearRange(baseDate=new Date()){
 // ======== ESTADO Y PERSISTENCIA ========
 const $ = (sel)=> document.querySelector(sel);
 
+const CLIENT_ID = '103921745137-e4qjpo069jrkjs77msr2gp6ga23fsfhc.apps.googleusercontent.com';
+
 function setAccentForView(view){
   const map = { resumenes:'#22c55e', semana:'#22c55e', mes:'#3b82f6', ano:'#8b5cf6' };
   const color = map[view] || '#7aa2ff';
@@ -72,8 +74,7 @@ if(storedHoursValue !== null){
 const cfg = {
   minutesAvailable: initialWeeklyMinutes,
   hoursAvailable: initialWeeklyMinutes / 60,
-  rules: JSON.parse(localStorage.getItem('rules') || '{}'),
-  clientId: localStorage.getItem('clientId') || ''
+  rules: JSON.parse(localStorage.getItem('rules') || '{}')
 };
 
 if(!Number.isFinite(cfg.hoursAvailable) || cfg.hoursAvailable <= 0){
@@ -640,7 +641,6 @@ if(hoursInputEl){
   const roundedHours = trimTrailingZeros(cfg.hoursAvailable.toFixed(2));
   hoursInputEl.value = roundedHours || '0';
 }
-$('#clientId').value = cfg.clientId;
 $('#rules-json').textContent = JSON.stringify(cfg.rules, null, 2);
 
 const initialWeekDate = storedWeekStartIso ? new Date(storedWeekStartIso) : new Date();
@@ -653,14 +653,13 @@ resetYearSummary();
 let tokenClient = null; let accessToken = null; let calendars = [];
 
 function initTokenClient(){
-  const clientId = $('#clientId').value.trim();
-  if(!clientId){
-    alert('Introduce tu Google OAuth CLIENT_ID');
-    setGcStatus('disconnected');
+  if(!window.google || !google.accounts || !google.accounts.oauth2){
+    console.warn('Biblioteca de Google OAuth todavía no disponible.');
+    setTimeout(initTokenClient, 250);
     return;
   }
   tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: clientId,
+    client_id: CLIENT_ID,
     scope: 'https://www.googleapis.com/auth/calendar.readonly',
     prompt: '',
     callback: (resp)=>{
@@ -674,6 +673,23 @@ function initTokenClient(){
       }
     }
   });
+}
+
+function requestGoogleAccessToken(attempt=0){
+  if(tokenClient){
+    tokenClient.requestAccessToken();
+    return;
+  }
+  if(attempt > 10){
+    alert('No se pudo inicializar Google OAuth. Intenta de nuevo en unos segundos.');
+    return;
+  }
+  initTokenClient();
+  if(tokenClient){
+    tokenClient.requestAccessToken();
+  }else{
+    setTimeout(()=>requestGoogleAccessToken(attempt + 1), 250);
+  }
 }
 
 async function loadCalendars(){
@@ -1441,17 +1457,14 @@ window.addEventListener('afterprint', ()=>{
 });
 
 $('#signin').addEventListener('click', ()=>{
-  localStorage.setItem('clientId', $('#clientId').value.trim());
-  initTokenClient();
-  tokenClient?.requestAccessToken();
+  requestGoogleAccessToken();
 });
 
 $('#refresh').addEventListener('click', ()=>{
   if(accessToken){
     loadCalendars();
   }else{
-    initTokenClient();
-    tokenClient?.requestAccessToken();
+    requestGoogleAccessToken();
   }
 });
 $('#load-week').addEventListener('click', ()=>{ if(!accessToken) return alert('Conéctate primero'); loadWeek(); });
@@ -1522,8 +1535,8 @@ window.addEventListener('unhandledrejection', (event)=>{
   }
 });
 
-// Autocarga si ya hay token en memoria del navegador (GIS puede reutilizar sesión)
+// Inicializa el cliente OAuth al cargar; GIS reutilizará sesión si es posible
 window.addEventListener('load', ()=>{
-  if(cfg.clientId){ initTokenClient(); }
+  initTokenClient();
 });
 
