@@ -92,6 +92,7 @@ const yearDadasEl = $('#stat-year-dadas');
 const yearAusenciasEl = $('#stat-year-ausencias');
 const yearProgramadasEl = $('#stat-year-programadas');
 const yearPctEl = $('#stat-year-pct');
+const yearShortfallEl = $('#stat-year-shortfall');
 const yearLabelEl = $('#year-label');
 const yearHoursLabelEl = $('#year-hours-label');
 const loadingIndicatorEl = $('#loading-indicator');
@@ -222,6 +223,18 @@ function minutesAvailableForRange(range){
   return weeklyMinutes * (diffMs / WEEK_IN_MS);
 }
 
+function resolveAvailableMinutes(summary, range){
+  const scheduleMinutes = Number(summary && summary.scheduleMinutes);
+  if(Number.isFinite(scheduleMinutes) && scheduleMinutes > 0){
+    return scheduleMinutes;
+  }
+  if(range){
+    return minutesAvailableForRange(range);
+  }
+  const configured = Number(cfg.minutesAvailable) || 0;
+  return configured > 0 ? configured : 0;
+}
+
 function formatPercent(value){
   if(!Number.isFinite(value) || value < 0){
     return '–';
@@ -230,20 +243,23 @@ function formatPercent(value){
   return `${fixed.replace(/\.0$/, '')}%`;
 }
 
-function calculateDeliveredPercent(summary){
+function calculateProductivityPercent(summary, availableMinutes){
   if(!summary) return null;
-  const total = Number(summary.dadas || 0) + Number(summary.programadas || 0);
-  if(!Number.isFinite(total) || total <= 0) return null;
-  return (Number(summary.dadas || 0) / total) * 100;
+  const available = Number(availableMinutes);
+  if(!Number.isFinite(available) || available <= 0) return null;
+  const deliveredMinutes = Number(summary.sessionMinutes || 0);
+  return (deliveredMinutes / available) * 100;
 }
 
-function calculateShortfall(summary, targetPercent = 80){
+function calculateSessionsShortfall(summary, availableMinutes, targetPercent = 80){
   if(!summary) return null;
-  const total = Number(summary.dadas || 0) + Number(summary.programadas || 0);
-  if(!Number.isFinite(total) || total < 0) return null;
-  if(total === 0) return 0;
-  const targetSessions = Math.ceil((targetPercent / 100) * total);
-  return Math.max(0, targetSessions - Number(summary.dadas || 0));
+  const available = Number(availableMinutes);
+  if(!Number.isFinite(available) || available <= 0) return null;
+  const deliveredMinutes = Number(summary.sessionMinutes || 0);
+  const targetMinutes = (targetPercent / 100) * available;
+  const missingMinutes = Math.max(0, targetMinutes - deliveredMinutes);
+  if(missingMinutes <= 0) return 0;
+  return Math.ceil(missingMinutes / MINUTES_PER_SESSION);
 }
 
 function formatShortfallValue(value){
@@ -253,7 +269,7 @@ function formatShortfallValue(value){
 
 function formatShortfallMessage(value){
   if(value == null || Number.isNaN(value)){
-    return 'Faltan — para alcanzar el objetivo';
+    return 'Sin datos de jornada para calcular el objetivo';
   }
   if(value <= 0){
     return 'Objetivo alcanzado';
@@ -646,10 +662,14 @@ function summarizeProcessedEvents(list){
     gines: 0,
     bormujos: 0,
     privado: 0,
-    totalMinutes: 0
+    totalMinutes: 0,
+    scheduleMinutes: 0
   };
   list.forEach(item=>{
     summary.totalMinutes += item.mins;
+    if(item.tipo === 'bloque'){
+      summary.scheduleMinutes += item.mins;
+    }
     switch(item.estadoKey){
       case 'dada':
         summary.dadas++;
@@ -674,6 +694,7 @@ function summarizeProcessedEvents(list){
   summary.sessionMinutes = summary.dadas * MINUTES_PER_SESSION;
   summary.sessionHours = minutesToHours(summary.sessionMinutes);
   summary.totalHours = minutesToHours(summary.totalMinutes);
+  summary.scheduleHours = minutesToHours(summary.scheduleMinutes);
   return summary;
 }
 
@@ -739,12 +760,14 @@ function analyzeEvent(ev, now = new Date()){
 function renderMonthSummary(events, range){
   const processed = processEventsCollection(events, new Date());
   const summary = summarizeProcessedEvents(processed);
-  const availableMinutes = minutesAvailableForRange(range);
+  const availableMinutes = resolveAvailableMinutes(summary, range);
   const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
-  const totalPlaneadas = summary.dadas + summary.programadas;
-  const pct = calculateDeliveredPercent(summary);
-  const monthlyShortfall = calculateShortfall(summary);
-  const weeklyShortfall = calculateShortfall(lastWeekSummaryData);
+  const totalPlaneadas = summary.dadas + summary.programadas + summary.enCurso;
+  const pct = calculateProductivityPercent(summary, availableMinutes);
+  const monthlyShortfall = calculateSessionsShortfall(summary, availableMinutes);
+  const weeklyShortfall = lastWeekSummaryData
+    ? calculateSessionsShortfall(lastWeekSummaryData.summary, lastWeekSummaryData.availableMinutes)
+    : null;
 
   monthDadasEl.textContent = String(summary.dadas);
   monthAusenciasEl.textContent = String(summary.ausencias);
@@ -759,26 +782,29 @@ function renderMonthSummary(events, range){
   const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
   monthLabelEl.textContent = `${formatMonthRangeText(range)}${extras}${enCursoText}`;
   monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
-  lastMonthSummaryData = { summary, range };
+  lastMonthSummaryData = { summary: { ...summary }, range, availableMinutes };
 }
 
 function renderYearSummary(events, range){
   const processed = processEventsCollection(events, new Date());
   const summary = summarizeProcessedEvents(processed);
-  const totalSesiones = summary.dadas + summary.ausencias;
-  const availableMinutes = minutesAvailableForRange(range);
+  const availableMinutes = resolveAvailableMinutes(summary, range);
   const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
 
   yearDadasEl.textContent = String(summary.dadas);
   yearAusenciasEl.textContent = String(summary.ausencias);
   yearProgramadasEl.textContent = programadasTexto;
-  const pct = totalSesiones > 0 ? (summary.dadas / totalSesiones) * 100 : null;
+  const pct = calculateProductivityPercent(summary, availableMinutes);
   yearPctEl.textContent = formatPercent(pct);
+  const yearlyShortfall = calculateSessionsShortfall(summary, availableMinutes);
+  if(yearShortfallEl){
+    yearShortfallEl.textContent = formatShortfallMessage(yearlyShortfall);
+  }
   const extras = summary.totalEventos > 0 ? ` · Total eventos: ${summary.totalEventos}` : '';
   const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
   yearLabelEl.textContent = `${formatYearRangeText(range)}${extras}${enCursoText}`;
   yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
-  lastYearSummaryData = { summary, range };
+  lastYearSummaryData = { summary: { ...summary }, range, availableMinutes };
 }
 
 // ======== CARGA DE EVENTOS ========
@@ -882,31 +908,37 @@ function updateWeeklyStats(summary){
   if(weekGinesEl) weekGinesEl.textContent = String(summary.gines);
   if(weekBormujosEl) weekBormujosEl.textContent = String(summary.bormujos);
   if(weekPrivadoEl) weekPrivadoEl.textContent = String(summary.privado);
-  const totalPlaneadas = summary.dadas + summary.programadas;
-  const deliveredPercent = calculateDeliveredPercent(summary);
-  const shortfall = calculateShortfall(summary);
+  const totalPlaneadas = summary.dadas + summary.programadas + summary.enCurso;
+  const availableMinutes = resolveAvailableMinutes(summary, week);
+  const deliveredPercent = calculateProductivityPercent(summary, availableMinutes);
+  const shortfall = calculateSessionsShortfall(summary, availableMinutes);
   if(weekTotalEl){
     weekTotalEl.textContent = Number.isFinite(totalPlaneadas) ? String(totalPlaneadas) : '–';
   }
   if(weekPctEl) weekPctEl.textContent = formatPercent(deliveredPercent);
   if(weekShortfallEl){
-    weekShortfallEl.textContent = totalPlaneadas === 0
-      ? 'Sin sesiones programadas'
-      : formatShortfallMessage(shortfall);
+    weekShortfallEl.textContent = formatShortfallMessage(shortfall);
   }
   if(monthWeekMissingEl) monthWeekMissingEl.textContent = formatShortfallValue(shortfall);
-  lastWeekSummaryData = { ...summary };
+  lastWeekSummaryData = {
+    summary: { ...summary },
+    availableMinutes
+  };
 }
 
 function refreshStoredSummaries(){
   if(lastMonthSummaryData){
-    const { summary, range } = lastMonthSummaryData;
-    const availableMinutes = minutesAvailableForRange(range);
+    const { summary, range, availableMinutes: stored } = lastMonthSummaryData;
+    const availableMinutes = Number.isFinite(stored) && stored > 0
+      ? stored
+      : resolveAvailableMinutes(summary, range);
     monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
   }
   if(lastYearSummaryData){
-    const { summary, range } = lastYearSummaryData;
-    const availableMinutes = minutesAvailableForRange(range);
+    const { summary, range, availableMinutes: stored } = lastYearSummaryData;
+    const availableMinutes = Number.isFinite(stored) && stored > 0
+      ? stored
+      : resolveAvailableMinutes(summary, range);
     yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
   }
 }
