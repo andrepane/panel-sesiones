@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Panel Semanal de Sesiones</title>
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -13,6 +15,8 @@
       <p class="muted">Controla tu agenda de Google Calendar con información lista para actuar.</p>
     </div>
     <div class="header-actions">
+      <input id="clientId" placeholder="Google OAuth CLIENT_ID" />
+      <button id="signin" class="btn-primary">Conectar Google Calendar</button>
       <button id="refresh" class="btn-ghost" title="Volver a cargar">↻</button>
     </div>
   </header>
@@ -21,14 +25,9 @@
     <div class="label"><span class="spinner"></span> Cargando…</div>
   </div>
 
-  <div class="tabs" role="tablist">
-    <button class="tab-btn active" data-tab="tab-summary" type="button">Resumen</button>
-    <button class="tab-btn" data-tab="tab-agenda" type="button">Agenda</button>
-    <button class="tab-btn" data-tab="tab-settings" type="button">Ajustes</button>
-  </div>
-
   <main>
-    <section id="tab-summary" class="tab-content active" role="tabpanel">
+    <div class="grid">
+      <!-- Columna izquierda: Resumen y tabla -->
       <section class="card summary-card">
         <div class="summary-top">
           <div>
@@ -38,18 +37,20 @@
           <div class="workload-overview">
             <div class="workload-block">
               <span class="workload-value" id="hours-label">– h / – h</span>
-              <span class="muted">Horas impartidas / Jornada</span>
+              <span class="muted">Horas de sesiones / Jornada</span>
+            </div>
+            <div class="workload-block">
+              <span class="workload-value" id="pct-label">0%</span>
+              <span class="muted">Ocupación semanal</span>
             </div>
           </div>
         </div>
-
+        <div class="progress-wrapper">
+          <div class="progress"><span id="progress-bar"></span></div>
+        </div>
         <div class="stat-grid" id="stats">
           <article class="stat">
-            <span class="label">Horas impartidas</span>
-            <span class="value" id="stat-week-hours">–</span>
-          </article>
-          <article class="stat">
-            <span class="label">Sesiones impartidas</span>
+            <span class="label">Sesiones impartidas (45')</span>
             <span class="value" id="stat-dadas">–</span>
             <span class="stat-subtext" id="stat-en-curso">En curso: –</span>
           </article>
@@ -61,8 +62,11 @@
             <span class="label">Ausencias</span>
             <span class="value" id="stat-ausencias">–</span>
           </article>
+          <article class="stat">
+            <span class="label">Otros eventos</span>
+            <span class="value" id="stat-otros">–</span>
+          </article>
         </div>
-
         <div class="stat-grid compact">
           <article class="stat">
             <span class="label">CAIT Gines</span>
@@ -76,10 +80,6 @@
             <span class="label">Privado</span>
             <span class="value" id="stat-privado">–</span>
           </article>
-          <article class="stat">
-            <span class="label">Otros eventos</span>
-            <span class="value" id="stat-otros">–</span>
-          </article>
         </div>
 
         <div class="divider"></div>
@@ -91,24 +91,28 @@
           </div>
           <div class="stat-grid compact" id="month-stats">
             <article class="stat">
-              <span class="label">Horas impartidas</span>
-              <span class="value" id="stat-month-hours">–</span>
-            </article>
-            <article class="stat">
               <span class="label">Sesiones impartidas</span>
               <span class="value" id="stat-month-dadas">–</span>
-            </article>
-            <article class="stat">
-              <span class="label">Programadas</span>
-              <span class="value" id="stat-month-programadas">–</span>
             </article>
             <article class="stat">
               <span class="label">Ausencias</span>
               <span class="value" id="stat-month-ausencias">–</span>
             </article>
             <article class="stat">
-              <span class="label">Asistencia %</span>
+              <span class="label">Programadas</span>
+              <span class="value" id="stat-month-programadas">–</span>
+            </article>
+            <article class="stat">
+              <span class="label">Otros eventos</span>
+              <span class="value" id="stat-month-otros">–</span>
+            </article>
+            <article class="stat">
+              <span class="label">% sesiones impartidas</span>
               <span class="value" id="stat-month-pct">–</span>
+            </article>
+            <article class="stat">
+              <span class="label">% ocupación</span>
+              <span class="value" id="stat-month-occupancy">–</span>
             </article>
           </div>
           <p class="muted" id="month-label">—</p>
@@ -123,127 +127,35 @@
           </div>
           <div class="stat-grid compact" id="year-stats">
             <article class="stat">
-              <span class="label">Horas impartidas</span>
-              <span class="value" id="stat-year-hours">–</span>
-            </article>
-            <article class="stat">
               <span class="label">Sesiones impartidas</span>
               <span class="value" id="stat-year-dadas">–</span>
-            </article>
-            <article class="stat">
-              <span class="label">Programadas</span>
-              <span class="value" id="stat-year-programadas">–</span>
             </article>
             <article class="stat">
               <span class="label">Ausencias</span>
               <span class="value" id="stat-year-ausencias">–</span>
             </article>
             <article class="stat">
-              <span class="label">Asistencia %</span>
+              <span class="label">Programadas</span>
+              <span class="value" id="stat-year-programadas">–</span>
+            </article>
+            <article class="stat">
+              <span class="label">Otros eventos</span>
+              <span class="value" id="stat-year-otros">–</span>
+            </article>
+            <article class="stat">
+              <span class="label">% sesiones impartidas</span>
               <span class="value" id="stat-year-pct">–</span>
+            </article>
+            <article class="stat">
+              <span class="label">% ocupación</span>
+              <span class="value" id="stat-year-occupancy">–</span>
             </article>
           </div>
           <p class="muted" id="year-label">—</p>
         </div>
-
-        <div class="divider"></div>
-
-        <div class="summary-section">
-          <div class="section-header">
-            <h3>Próximas 5 sesiones</h3>
-            <span class="muted" id="upcoming-info">—</span>
-          </div>
-          <ul class="upcoming-list" id="upcoming-sessions"></ul>
-        </div>
       </section>
-    </section>
 
-    <section id="tab-agenda" class="tab-content" role="tabpanel" aria-hidden="true">
-      <section class="card" style="margin-top:16px">
-        <div class="section-heading">
-          <div>
-            <h2>Agenda semanal</h2>
-            <p class="muted" id="range-label">—</p>
-          </div>
-          <div class="row compact">
-            <span class="muted">Fuente: iCal</span>
-            <button id="load-week">Actualizar semana</button>
-          </div>
-        </div>
-
-        <div class="row compact controls-row">
-          <button id="prev-week" class="btn-ghost" title="Semana anterior">◀</button>
-          <input id="week-picker" type="date" />
-          <button id="next-week" class="btn-ghost" title="Semana siguiente">▶</button>
-          <button id="today-week" class="btn-ghost">Semana actual</button>
-        </div>
-
-        <div class="legend">
-          <div>
-            <span class="legend-title">Estados</span>
-            <div class="legend-group">
-              <span class="legend-item"><span class="legend-dot green"></span>Dada</span>
-              <span class="legend-item"><span class="legend-dot yellow"></span>Programada</span>
-              <span class="legend-item"><span class="legend-dot blue"></span>En curso</span>
-              <span class="legend-item"><span class="legend-dot red"></span>Ausencia</span>
-              <span class="legend-item"><span class="legend-dot gray"></span>Otros</span>
-            </div>
-          </div>
-          <div>
-            <span class="legend-title">Centros</span>
-            <div class="legend-group">
-              <span class="legend-item"><span class="legend-dot green"></span>Gines</span>
-              <span class="legend-item"><span class="legend-dot orange"></span>Bormujos</span>
-              <span class="legend-item"><span class="legend-dot purple"></span>Privado</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="filters-panel">
-          <div>
-            <span class="muted">Filtrar por estado</span>
-            <div class="chip-group" id="status-filters">
-              <button class="chip" data-key="dada">Dadas</button>
-              <button class="chip" data-key="programada">Programadas</button>
-              <button class="chip" data-key="ausencia">Ausencias</button>
-              <button class="chip" data-key="otro">Otros</button>
-            </div>
-          </div>
-          <div>
-            <span class="muted">Filtrar por centro</span>
-            <div class="chip-group" id="center-filters">
-              <button class="chip" data-key="gines">Gines</button>
-              <button class="chip" data-key="bormujos">Bormujos</button>
-              <button class="chip" data-key="privado">Privado</button>
-            </div>
-          </div>
-          <div class="table-actions">
-            <button id="export-csv" class="btn-ghost">Exportar CSV</button>
-            <button id="print-view" class="btn-ghost">Imprimir vista</button>
-          </div>
-        </div>
-
-        <div class="table-container">
-          <table id="events-table">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Inicio</th>
-                <th>Fin</th>
-                <th>Título</th>
-                <th>Centro</th>
-                <th>Estado</th>
-                <th>Tipo</th>
-                <th>Duración (h)</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
-    </section>
-
-    <section id="tab-settings" class="tab-content" role="tabpanel" aria-hidden="true">
+      <!-- Columna derecha: Configuración -->
       <aside class="card settings-card">
         <h2>Preferencias rápidas</h2>
         <div class="form-group">
@@ -252,16 +164,7 @@
             <input id="cfg-hours" type="number" min="0" step="0.25" value="38.5" />
             <button id="save-cfg">Guardar</button>
           </div>
-          <p class="muted help-text">Ajusta la referencia semanal de horas.</p>
-        </div>
-
-        <div class="form-group">
-          <label class="muted" for="ical-url">URL secreta iCal (solo lectura)</label>
-          <div class="row compact">
-            <input id="ical-url" type="url" placeholder="https://..." />
-            <button id="save-ical">Guardar</button>
-          </div>
-          <p class="muted help-text">Introduce la URL privada del calendario y carga los eventos sin iniciar sesión.</p>
+          <p class="muted help-text">Ajusta la referencia semanal para la barra de ocupación. Puedes usar decimales para medias horas.</p>
         </div>
 
         <div class="form-group">
@@ -276,7 +179,7 @@
     "bormujos": ["(b)"],
     "privado": ["(p)"]
   },
-  "pattern_sesion": "^\\\*?\\s*(\\d{3,6})\\s+(.+?)\\s*\\(([BGP])\\)\\s*$",
+  "pattern_sesion": "^\\*?\\s*(\\d{3,6})\\s+(.+?)\\s*\\(([BGP])\\)\\s*$",
   "otros_excluir_totalmente": [
     "^g\\s*:\\s*\\d+$",
     "^b\\s*:\\s*\\d+$",
@@ -302,8 +205,91 @@
           <p class="muted help-text">Usa <strong>*</strong> al inicio del título para marcar una ausencia.</p>
         </div>
 
-        <p class="muted small-print">La aplicación lee los eventos desde la URL iCal proporcionada. Manténla en secreto.</p>
+        <p class="muted small-print">La aplicación únicamente solicita acceso de lectura a tu Google Calendar. Conecta tu Client ID para empezar.</p>
       </aside>
+    </div>
+
+    <section class="card" style="margin-top:16px">
+      <div class="section-heading">
+        <div>
+          <h2>Eventos de la semana</h2>
+          <p class="muted" id="range-label">—</p>
+        </div>
+        <div class="row compact">
+          <select id="calendar-select"></select>
+          <button id="load-week">Actualizar semana</button>
+        </div>
+      </div>
+
+      <div class="row compact controls-row">
+        <button id="prev-week" class="btn-ghost" title="Semana anterior">◀</button>
+        <input id="week-picker" type="date" />
+        <button id="next-week" class="btn-ghost" title="Semana siguiente">▶</button>
+        <button id="today-week" class="btn-ghost">Semana actual</button>
+      </div>
+
+      <div class="legend">
+        <div>
+          <span class="legend-title">Estados</span>
+          <div class="legend-group">
+            <span class="legend-item"><span class="legend-dot green"></span>Dada</span>
+            <span class="legend-item"><span class="legend-dot yellow"></span>Programada</span>
+            <span class="legend-item"><span class="legend-dot blue"></span>En curso</span>
+            <span class="legend-item"><span class="legend-dot red"></span>Ausencia</span>
+            <span class="legend-item"><span class="legend-dot gray"></span>Otros</span>
+          </div>
+        </div>
+        <div>
+          <span class="legend-title">Centros</span>
+          <div class="legend-group">
+            <span class="legend-item"><span class="legend-dot green"></span>Gines</span>
+            <span class="legend-item"><span class="legend-dot orange"></span>Bormujos</span>
+            <span class="legend-item"><span class="legend-dot purple"></span>Privado</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="filters-panel">
+        <div>
+          <span class="muted">Filtrar por estado</span>
+          <div class="chip-group" id="status-filters">
+            <button class="chip" data-key="dada">Dadas</button>
+            <button class="chip" data-key="programada">Programadas</button>
+            <button class="chip" data-key="ausencia">Ausencias</button>
+            <button class="chip" data-key="otro">Otros</button>
+          </div>
+        </div>
+        <div>
+          <span class="muted">Filtrar por centro</span>
+          <div class="chip-group" id="center-filters">
+            <button class="chip" data-key="gines">Gines</button>
+            <button class="chip" data-key="bormujos">Bormujos</button>
+            <button class="chip" data-key="privado">Privado</button>
+          </div>
+        </div>
+        <div class="table-actions">
+          <button id="export-csv" class="btn-ghost">Exportar CSV</button>
+          <button id="print-view" class="btn-ghost">Imprimir vista</button>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table id="events-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Inicio</th>
+              <th>Fin</th>
+              <th>Título</th>
+              <th>Centro</th>
+              <th>Estado</th>
+              <th>Tipo</th>
+              <th>Duración</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </section>
   </main>
 
