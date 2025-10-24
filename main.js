@@ -193,14 +193,12 @@ function minutesAvailableForRange(range){
   return weeklyMinutes * (diffMs / WEEK_IN_MS);
 }
 
-async function fetchIcal(url){
-  const response = await fetch(url, { cache: 'no-store' });
-  if(!response.ok){
-    const text = await response.text().catch(()=> '');
-    throw new Error(`Error al descargar el iCal (${response.status}): ${text}`);
-  }
-  return response.text();
+async function fetchIcal() {
+  const res = await fetch('/api/ical');
+  if (!res.ok) throw new Error('Proxy error');
+  return await res.text();
 }
+
 
 function decodeIcsText(value=''){
   return value
