@@ -39,6 +39,21 @@ function getYearRange(baseDate=new Date()){
 // ======== ESTADO Y PERSISTENCIA ========
 const $ = (sel)=> document.querySelector(sel);
 
+function setAccentForView(view){
+  const map = { resumenes:'#22c55e', semana:'#22c55e', mes:'#3b82f6', ano:'#8b5cf6' };
+  const color = map[view] || '#7aa2ff';
+  document.documentElement.style.setProperty('--accent', color);
+}
+
+function setPercentColor(el, val){
+  if(!el) return;
+  el.classList.remove('is-low','is-mid','is-high');
+  if(!Number.isFinite(val)) return;
+  if(val < 50){ el.classList.add('is-low'); }
+  else if(val < 80){ el.classList.add('is-mid'); }
+  else{ el.classList.add('is-high'); }
+}
+
 const storedHoursValue = localStorage.getItem('hoursAvailable');
 const storedMinutesValue = localStorage.getItem('minutesAvailable');
 let initialWeeklyMinutes = 2310;
@@ -78,6 +93,7 @@ const weekBormujosEl = $('#stat-bormujos');
 const weekPrivadoEl = $('#stat-privado');
 const weekTotalEl = $('#stat-week-total');
 const weekPctEl = $('#stat-week-pct');
+const weekPctDeltaEl = $('#stat-week-delta');
 const weekShortfallEl = $('#stat-week-shortfall');
 const weekHoursLabelEl = (()=>{
   if(!weekPctEl) return null;
@@ -94,6 +110,7 @@ const monthDadasEl = $('#stat-month-dadas');
 const monthAusenciasEl = $('#stat-month-ausencias');
 const monthProgramadasEl = $('#stat-month-programadas');
 const monthPctEl = $('#stat-month-pct');
+const monthPctDeltaEl = $('#stat-month-delta');
 const monthTotalEl = $('#stat-month-total');
 const monthWeekMissingEl = $('#stat-month-week-missing');
 const monthMissingEl = $('#stat-month-missing');
@@ -103,6 +120,7 @@ const yearDadasEl = $('#stat-year-dadas');
 const yearAusenciasEl = $('#stat-year-ausencias');
 const yearProgramadasEl = $('#stat-year-programadas');
 const yearPctEl = $('#stat-year-pct');
+const yearPctDeltaEl = $('#stat-year-delta');
 const yearShortfallEl = $('#stat-year-shortfall');
 const yearLabelEl = $('#year-label');
 const yearHoursLabelEl = $('#year-hours-label');
@@ -112,10 +130,29 @@ const centerFiltersEl = $('#center-filters');
 const hoursInputEl = $('#cfg-hours');
 const exportCsvBtn = $('#export-csv');
 const printViewBtn = $('#print-view');
-const tabButtons = document.querySelectorAll('.view-tabs .tab');
+const primaryTabButtons = document.querySelectorAll('nav.view-tabs[data-role="primary"] .tab');
 const viewPanels = document.querySelectorAll('.view-panel');
+const summaryTabButtons = document.querySelectorAll('.summary-tabs .tab');
+const summaryPanels = document.querySelectorAll('.kpi-panel');
+const quickReportBtn = $('#quick-report');
+const gcStatusEl = $('#gc-status');
 const DEFAULT_VIEW = 'resumenes';
 let currentView = DEFAULT_VIEW;
+const SUMMARY_DEFAULT_VIEW = 'semana';
+let currentSummaryView = SUMMARY_DEFAULT_VIEW;
+
+function setGcStatus(state){
+  if(!gcStatusEl) return;
+  const map = {
+    connected: { text: 'Conectado', className: 'ok' },
+    retrying: { text: 'Reintentando…', className: 'warn' },
+    disconnected: { text: 'Sin conexión', className: 'muted' }
+  };
+  const cfgEntry = map[state] || map.disconnected;
+  gcStatusEl.textContent = cfgEntry.text;
+  gcStatusEl.classList.remove('ok','warn','muted');
+  gcStatusEl.classList.add(cfgEntry.className);
+}
 
 const FALLBACK_SESSION_REGEX = /^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$/i;
 
@@ -154,7 +191,7 @@ function activateView(viewKey=DEFAULT_VIEW){
   const panels = Array.from(viewPanels);
   const validView = panels.some((panel)=> panel.dataset.view === viewKey) ? viewKey : DEFAULT_VIEW;
 
-  tabButtons.forEach((btn)=>{
+  primaryTabButtons.forEach((btn)=>{
     const isActive = btn.dataset.view === validView;
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
@@ -179,13 +216,61 @@ function activateView(viewKey=DEFAULT_VIEW){
   }
 }
 
-if(tabButtons.length){
+if(primaryTabButtons.length){
   const storedView = localStorage.getItem('activeView');
   activateView(storedView || DEFAULT_VIEW);
-  tabButtons.forEach((btn)=>{
+  primaryTabButtons.forEach((btn)=>{
     btn.addEventListener('click', ()=> activateView(btn.dataset.view));
   });
 }
+
+function activateSummaryView(viewKey=SUMMARY_DEFAULT_VIEW){
+  if(!summaryPanels.length){
+    currentSummaryView = viewKey;
+    setAccentForView(viewKey);
+    return;
+  }
+  const panels = Array.from(summaryPanels);
+  const validView = panels.some((panel)=> panel.dataset.view === viewKey) ? viewKey : SUMMARY_DEFAULT_VIEW;
+
+  summaryTabButtons.forEach((btn)=>{
+    const isActive = btn.dataset.view === validView;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    btn.setAttribute('tabindex', isActive ? '0' : '-1');
+  });
+
+  panels.forEach((panel)=>{
+    const isActive = panel.dataset.view === validView;
+    panel.classList.toggle('active', isActive);
+    panel.classList.toggle('kpi-accent', isActive);
+    if(isActive){
+      panel.removeAttribute('aria-hidden');
+    }else{
+      panel.setAttribute('aria-hidden', 'true');
+    }
+  });
+
+  currentSummaryView = validView;
+  setAccentForView(validView);
+  try{
+    localStorage.setItem('activeSummaryView', validView);
+  }catch(err){
+    console.warn('No se pudo guardar la vista de resumen activa', err);
+  }
+}
+
+if(summaryTabButtons.length){
+  const storedSummaryView = localStorage.getItem('activeSummaryView');
+  activateSummaryView(storedSummaryView || SUMMARY_DEFAULT_VIEW);
+  summaryTabButtons.forEach((btn)=>{
+    btn.addEventListener('click', ()=> activateSummaryView(btn.dataset.view));
+  });
+}else{
+  setAccentForView(SUMMARY_DEFAULT_VIEW);
+}
+
+setGcStatus('disconnected');
 
 function showLoading(){
   loadingCounter++;
@@ -269,6 +354,127 @@ function calculateSessionsShortfall(summary, availableMinutes, targetPercent = P
   const missingMinutes = Math.max(0, targetMinutes - deliveredMinutes);
   if(missingMinutes <= 0) return 0;
   return Math.ceil(missingMinutes / MINUTES_PER_SESSION);
+}
+
+function buildPeriodKey(view, referenceDate){
+  if(!referenceDate) return null;
+  const base = new Date(referenceDate);
+  if(Number.isNaN(base.getTime())) return null;
+  switch(view){
+    case 'semana':{
+      const { start } = getWeekRange(base);
+      return `wk-${start.toISOString().slice(0, 10)}`;
+    }
+    case 'mes':{
+      const { start } = getMonthRange(base);
+      const year = start.getFullYear();
+      const month = String(start.getMonth() + 1).padStart(2, '0');
+      return `mo-${year}-${month}`;
+    }
+    case 'ano':{
+      const { start } = getYearRange(base);
+      return `yr-${start.getFullYear()}`;
+    }
+    default:
+      return null;
+  }
+}
+
+function getPreviousPeriodKey(view, referenceDate){
+  if(!referenceDate) return null;
+  const base = new Date(referenceDate);
+  if(Number.isNaN(base.getTime())) return null;
+  switch(view){
+    case 'semana':{
+      const prev = new Date(base);
+      prev.setDate(prev.getDate() - 7);
+      return buildPeriodKey('semana', prev);
+    }
+    case 'mes':{
+      const prev = new Date(base);
+      prev.setMonth(prev.getMonth() - 1);
+      return buildPeriodKey('mes', prev);
+    }
+    case 'ano':{
+      const prev = new Date(base);
+      prev.setFullYear(prev.getFullYear() - 1);
+      return buildPeriodKey('ano', prev);
+    }
+    default:
+      return null;
+  }
+}
+
+function readStoredPercent(key){
+  if(!key) return null;
+  try{
+    const raw = localStorage.getItem(key);
+    if(raw == null) return null;
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : null;
+  }catch(err){
+    console.warn('No se pudo leer el histórico de productividad', err);
+    return null;
+  }
+}
+
+function storePercentValue(key, value){
+  if(!key || !Number.isFinite(value)) return;
+  try{
+    localStorage.setItem(key, String(value));
+  }catch(err){
+    console.warn('No se pudo guardar el histórico de productividad', err);
+  }
+}
+
+function clearPercentIndicator(element, deltaEl){
+  if(!element) return;
+  element.classList.remove('is-low','is-mid','is-high');
+  if(element.dataset){
+    delete element.dataset.deltaValue;
+    delete element.dataset.deltaArrow;
+  }
+  if(deltaEl){
+    deltaEl.textContent = '';
+    deltaEl.classList.add('hidden');
+  }
+}
+
+function updatePercentIndicator({ element, deltaEl, view, referenceDate, value }){
+  if(!element) return;
+  setPercentColor(element, value);
+  if(!Number.isFinite(value)){
+    clearPercentIndicator(element, deltaEl);
+    return;
+  }
+
+  const previousKey = getPreviousPeriodKey(view, referenceDate);
+  const previousValue = previousKey ? readStoredPercent(previousKey) : null;
+
+  if(deltaEl){
+    if(previousValue == null){
+      if(element.dataset){
+        delete element.dataset.deltaValue;
+        delete element.dataset.deltaArrow;
+      }
+      deltaEl.textContent = '';
+      deltaEl.classList.add('hidden');
+    }else{
+      const diff = value - previousValue;
+      const sign = diff >= 0 ? '+' : '-';
+      const arrow = diff >= 0 ? '▲' : '▼';
+      const formatted = trimTrailingZeros(Math.abs(diff).toFixed(1));
+      deltaEl.textContent = `${arrow} ${sign}${formatted} pp vs periodo anterior`;
+      deltaEl.classList.remove('hidden');
+      if(element.dataset){
+        element.dataset.deltaValue = `${sign}${formatted}`;
+        element.dataset.deltaArrow = arrow;
+      }
+    }
+  }
+
+  const currentKey = buildPeriodKey(view, referenceDate);
+  storePercentValue(currentKey, value);
 }
 
 function formatShortfallValue(value){
@@ -380,6 +586,7 @@ function resetMonthSummary(text='—'){
   monthProgramadasEl.textContent = '–';
   if(monthTotalEl) monthTotalEl.textContent = '–';
   monthPctEl.textContent = '–';
+  clearPercentIndicator(monthPctEl, monthPctDeltaEl);
   if(monthWeekMissingEl) monthWeekMissingEl.textContent = '—';
   if(monthMissingEl) monthMissingEl.textContent = '—';
   monthLabelEl.textContent = text;
@@ -393,6 +600,7 @@ function setMonthSummaryLoading(range){
   monthProgramadasEl.textContent = '…';
   if(monthTotalEl) monthTotalEl.textContent = '…';
   monthPctEl.textContent = '…';
+  clearPercentIndicator(monthPctEl, monthPctDeltaEl);
   if(monthWeekMissingEl) monthWeekMissingEl.textContent = '…';
   if(monthMissingEl) monthMissingEl.textContent = '…';
   monthLabelEl.textContent = range ? `Cargando ${formatMonthRangeText(range)}...` : 'Cargando resumen mensual...';
@@ -405,6 +613,7 @@ function resetYearSummary(text='—'){
   yearAusenciasEl.textContent = '–';
   yearProgramadasEl.textContent = '–';
   yearPctEl.textContent = '–';
+  clearPercentIndicator(yearPctEl, yearPctDeltaEl);
   yearLabelEl.textContent = text;
   yearHoursLabelEl.textContent = '—';
   lastYearSummaryData = null;
@@ -415,6 +624,7 @@ function setYearSummaryLoading(range){
   yearAusenciasEl.textContent = '…';
   yearProgramadasEl.textContent = '…';
   yearPctEl.textContent = '…';
+  clearPercentIndicator(yearPctEl, yearPctDeltaEl);
   yearLabelEl.textContent = range ? `Cargando ${formatYearRangeText(range)}...` : 'Cargando resumen anual...';
   yearHoursLabelEl.textContent = '…';
   lastYearSummaryData = null;
@@ -444,19 +654,30 @@ let tokenClient = null; let accessToken = null; let calendars = [];
 
 function initTokenClient(){
   const clientId = $('#clientId').value.trim();
-  if(!clientId){ alert('Introduce tu Google OAuth CLIENT_ID'); return; }
+  if(!clientId){
+    alert('Introduce tu Google OAuth CLIENT_ID');
+    setGcStatus('disconnected');
+    return;
+  }
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: 'https://www.googleapis.com/auth/calendar.readonly',
     prompt: '',
     callback: (resp)=>{
-      if(resp && resp.access_token){ accessToken = resp.access_token; loadCalendars(); }
-      else alert('No se obtuvo access_token');
+      if(resp && resp.access_token){
+        accessToken = resp.access_token;
+        setGcStatus('connected');
+        loadCalendars();
+      }else{
+        alert('No se obtuvo access_token');
+        setGcStatus('disconnected');
+      }
     }
   });
 }
 
 async function loadCalendars(){
+  setGcStatus('retrying');
   try{
     showLoading();
     const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
@@ -481,10 +702,12 @@ async function loadCalendars(){
       const lg = calendars.find(c=> (c.summary||'').toLowerCase().includes('andrea lg'));
       if(lg){ sel.value = lg.id; }
     }
+    setGcStatus('connected');
     if(calendars.length){ loadWeek(); }
   }catch(err){
     console.error(err);
     alert('No se pudieron cargar los calendarios. Revisa la consola para más detalles.');
+    setGcStatus('disconnected');
   }finally{
     hideLoading();
   }
@@ -782,6 +1005,13 @@ function renderMonthSummary(events, range){
   monthAusenciasEl.textContent = String(summary.ausencias);
   monthProgramadasEl.textContent = programadasTexto;
   monthPctEl.textContent = formatPercent(pct);
+  updatePercentIndicator({
+    element: monthPctEl,
+    deltaEl: monthPctDeltaEl,
+    view: 'mes',
+    referenceDate: range?.start,
+    value: pct
+  });
   if(monthTotalEl){
     monthTotalEl.textContent = Number.isFinite(totalPlaneadas) ? String(totalPlaneadas) : '–';
   }
@@ -805,6 +1035,13 @@ function renderYearSummary(events, range){
   yearProgramadasEl.textContent = programadasTexto;
   const pct = calculateProductivityPercent(summary, availableMinutes);
   yearPctEl.textContent = formatPercent(pct);
+  updatePercentIndicator({
+    element: yearPctEl,
+    deltaEl: yearPctDeltaEl,
+    view: 'ano',
+    referenceDate: range?.start,
+    value: pct
+  });
   const yearlyShortfall = calculateSessionsShortfall(summary, availableMinutes);
   if(yearShortfallEl){
     yearShortfallEl.textContent = formatShortfallMessage(yearlyShortfall);
@@ -925,6 +1162,13 @@ function updateWeeklyStats(summary){
     weekTotalEl.textContent = Number.isFinite(totalPlaneadas) ? String(totalPlaneadas) : '–';
   }
   if(weekPctEl) weekPctEl.textContent = formatPercent(deliveredPercent);
+  updatePercentIndicator({
+    element: weekPctEl,
+    deltaEl: weekPctDeltaEl,
+    view: 'semana',
+    referenceDate: week?.start,
+    value: deliveredPercent
+  });
   if(weekShortfallEl){
     weekShortfallEl.textContent = formatShortfallMessage(shortfall);
   }
@@ -948,6 +1192,42 @@ function refreshStoredSummaries(){
     const { summary, range } = lastYearSummaryData;
     const availableMinutes = minutesAvailableForRange(range);
     yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
+  }
+}
+
+function formatDeltaForReport(element, label){
+  if(!element) return `Δpp vs ${label}: sin datos`;
+  const value = element.dataset?.deltaValue;
+  if(!value){
+    return `Δpp vs ${label}: sin datos`;
+  }
+  const arrow = element.dataset?.deltaArrow ? `${element.dataset.deltaArrow} ` : '';
+  return `Δpp vs ${label}: ${arrow}${value} pp`;
+}
+
+function getTextContent(el){
+  return (el?.textContent || '–').trim();
+}
+
+function buildQuickReport(viewKey){
+  const sanitizedView = viewKey || SUMMARY_DEFAULT_VIEW;
+  switch(sanitizedView){
+    case 'mes':{
+      const base = `Este mes llevas ${getTextContent(monthDadasEl)} sesiones (${getTextContent(monthPctEl)}), ${getTextContent(monthProgramadasEl)} programadas y ${getTextContent(monthAusenciasEl)} ausencias.`;
+      const delta = formatDeltaForReport(monthPctEl, 'mes anterior');
+      return `${base} ${delta}.`;
+    }
+    case 'ano':{
+      const base = `Este año llevas ${getTextContent(yearDadasEl)} sesiones (${getTextContent(yearPctEl)}), ${getTextContent(yearProgramadasEl)} programadas y ${getTextContent(yearAusenciasEl)} ausencias.`;
+      const delta = formatDeltaForReport(yearPctEl, 'año anterior');
+      return `${base} ${delta}.`;
+    }
+    case 'semana':
+    default:{
+      const base = `Esta semana llevas ${getTextContent(weekDadasEl)} sesiones (${getTextContent(weekPctEl)}), ${getTextContent(weekProgramadasEl)} programadas y ${getTextContent(weekAusenciasEl)} ausencias.`;
+      const delta = formatDeltaForReport(weekPctEl, 'semana anterior');
+      return `${base} ${delta}.`;
+    }
   }
 }
 
@@ -1053,6 +1333,14 @@ function renderTableRows(list){
   subtotalRow.appendChild(cell4);
   tbody.appendChild(subtotalRow);
 }
+
+quickReportBtn?.addEventListener('click', ()=>{
+  const view = currentSummaryView || SUMMARY_DEFAULT_VIEW;
+  const report = buildQuickReport(view);
+  if(report){
+    alert(report);
+  }
+});
 
 function syncFilterChips(){
   if(statusFiltersEl){

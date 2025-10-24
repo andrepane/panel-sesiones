@@ -26,6 +26,7 @@
       <div class="auth-controls">
         <input id="clientId" placeholder="Google OAuth CLIENT_ID" />
         <button id="signin" class="btn-primary">Conectar Google Calendar</button>
+        <span id="gc-status" class="badge muted" role="status" aria-live="polite">Sin conexión</span>
         <button id="refresh" class="btn-ghost" title="Volver a cargar">↻</button>
       </div>
     </div>
@@ -36,7 +37,7 @@
   </div>
 
   <main class="app-main">
-    <nav class="view-tabs" aria-label="Secciones del panel" role="tablist">
+    <nav class="view-tabs main-tabs" data-role="primary" aria-label="Secciones del panel" role="tablist">
       <button class="tab active" type="button" role="tab" tabindex="0" aria-selected="true" aria-controls="panel-resumenes" data-view="resumenes">Resúmenes</button>
       <button class="tab" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="panel-pacientes" data-view="pacientes">Pacientes</button>
       <button class="tab" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="panel-ajustes" data-view="ajustes">Ajustes</button>
@@ -50,10 +51,21 @@
               <h2>Resumen de productividad</h2>
               <span class="tag" id="week-label">Semana actual</span>
             </div>
+            <div class="summary-actions">
+              <button id="quick-report" class="btn-ghost accent-ring" type="button">Informe rápido</button>
+            </div>
+          </div>
+
+          <div class="summary-switcher">
+            <div class="view-tabs summary-tabs" data-role="summary" role="tablist" aria-label="Cambiar periodo del resumen">
+              <button class="tab active" id="summary-tab-semana" type="button" role="tab" tabindex="0" aria-selected="true" aria-controls="kpi-panel-semana" data-view="semana">Semana</button>
+              <button class="tab" id="summary-tab-mes" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="kpi-panel-mes" data-view="mes">Mes</button>
+              <button class="tab" id="summary-tab-ano" type="button" role="tab" tabindex="-1" aria-selected="false" aria-controls="kpi-panel-ano" data-view="ano">Año</button>
+            </div>
           </div>
 
           <div class="summary-panels">
-            <article class="panel">
+            <article class="panel kpi-panel active" id="kpi-panel-semana" role="tabpanel" aria-labelledby="summary-tab-semana" data-view="semana">
               <header>
                 <h3>Semana</h3>
                 <span class="muted">Detalle operativo</span>
@@ -78,7 +90,8 @@
                 </article>
                 <article class="stat">
                   <span class="label">% sesiones impartidas</span>
-                  <span class="value" id="stat-week-pct">–</span>
+                  <span class="value percent" id="stat-week-pct">–</span>
+                  <span class="delta hidden" id="stat-week-delta"></span>
                   <span class="stat-subtext">Objetivo: 80%</span>
                   <span class="stat-subtext" id="stat-week-shortfall">Faltan — para alcanzar el objetivo</span>
                 </article>
@@ -99,7 +112,7 @@
               </div>
             </article>
 
-            <article class="panel">
+            <article class="panel kpi-panel" id="kpi-panel-mes" role="tabpanel" aria-hidden="true" aria-labelledby="summary-tab-mes" data-view="mes">
               <header>
                 <h3>Mes</h3>
                 <span class="muted" id="month-hours-label">—</span>
@@ -123,7 +136,8 @@
                 </article>
                 <article class="stat">
                   <span class="label">% sesiones impartidas</span>
-                  <span class="value" id="stat-month-pct">–</span>
+                  <span class="value percent" id="stat-month-pct">–</span>
+                  <span class="delta hidden" id="stat-month-delta"></span>
                   <span class="stat-subtext">Objetivo: 80%</span>
                   <span class="stat-subtext" id="stat-month-shortfalls">Semana: faltan <span id="stat-month-week-missing">—</span> · Mes: faltan <span id="stat-month-missing">—</span></span>
                 </article>
@@ -131,7 +145,7 @@
               <p class="muted" id="month-label">—</p>
             </article>
 
-            <article class="panel">
+            <article class="panel kpi-panel" id="kpi-panel-ano" role="tabpanel" aria-hidden="true" aria-labelledby="summary-tab-ano" data-view="ano">
               <header>
                 <h3>Año</h3>
                 <span class="muted" id="year-hours-label">—</span>
@@ -151,7 +165,8 @@
                 </article>
                 <article class="stat">
                   <span class="label">% sesiones impartidas</span>
-                  <span class="value" id="stat-year-pct">–</span>
+                  <span class="value percent" id="stat-year-pct">–</span>
+                  <span class="delta hidden" id="stat-year-delta"></span>
                   <span class="stat-subtext">Objetivo: 80%</span>
                   <span class="stat-subtext" id="stat-year-shortfall">Faltan — para alcanzar el objetivo</span>
                 </article>
