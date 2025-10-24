@@ -102,6 +102,10 @@ const centerFiltersEl = $('#center-filters');
 const hoursInputEl = $('#cfg-hours');
 const exportCsvBtn = $('#export-csv');
 const printViewBtn = $('#print-view');
+const tabButtons = document.querySelectorAll('.view-tabs .tab');
+const viewPanels = document.querySelectorAll('.view-panel');
+const DEFAULT_VIEW = 'resumenes';
+let currentView = DEFAULT_VIEW;
 
 const FALLBACK_SESSION_REGEX = /^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$/i;
 
@@ -134,6 +138,44 @@ let activeCenterFilters = new Set(CENTER_FILTER_KEYS);
 let processedWeekEvents = [];
 let filteredWeekEvents = [];
 let loadingCounter = 0;
+
+function activateView(viewKey=DEFAULT_VIEW){
+  if(!viewPanels.length) return;
+  const panels = Array.from(viewPanels);
+  const validView = panels.some((panel)=> panel.dataset.view === viewKey) ? viewKey : DEFAULT_VIEW;
+
+  tabButtons.forEach((btn)=>{
+    const isActive = btn.dataset.view === validView;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    btn.setAttribute('tabindex', isActive ? '0' : '-1');
+  });
+
+  panels.forEach((panel)=>{
+    const isActive = panel.dataset.view === validView;
+    panel.classList.toggle('active', isActive);
+    if(isActive){
+      panel.removeAttribute('aria-hidden');
+    }else{
+      panel.setAttribute('aria-hidden', 'true');
+    }
+  });
+
+  currentView = validView;
+  try{
+    localStorage.setItem('activeView', validView);
+  }catch(err){
+    console.warn('No se pudo guardar la vista activa', err);
+  }
+}
+
+if(tabButtons.length){
+  const storedView = localStorage.getItem('activeView');
+  activateView(storedView || DEFAULT_VIEW);
+  tabButtons.forEach((btn)=>{
+    btn.addEventListener('click', ()=> activateView(btn.dataset.view));
+  });
+}
 
 function showLoading(){
   loadingCounter++;
@@ -1002,9 +1044,13 @@ function exportWeekToCsv(){
 }
 
 function triggerPrintView(){
+  const previousView = currentView;
+  document.body.dataset.previousView = previousView;
+  if(previousView !== 'pacientes'){
+    activateView('pacientes');
+  }
   document.body.classList.add('print-friendly');
   setTimeout(()=>{ window.print(); }, 50);
-  setTimeout(()=> document.body.classList.remove('print-friendly'), 1000);
 }
 
 // ======== EVENTOS UI ========
@@ -1032,7 +1078,14 @@ centerFiltersEl?.addEventListener('click', (event)=>{
 
 exportCsvBtn?.addEventListener('click', exportWeekToCsv);
 printViewBtn?.addEventListener('click', triggerPrintView);
-window.addEventListener('afterprint', ()=> document.body.classList.remove('print-friendly'));
+window.addEventListener('afterprint', ()=>{
+  const previousView = document.body.dataset.previousView;
+  document.body.classList.remove('print-friendly');
+  if(previousView && previousView !== currentView){
+    activateView(previousView);
+  }
+  delete document.body.dataset.previousView;
+});
 
 $('#signin').addEventListener('click', ()=>{
   localStorage.setItem('clientId', $('#clientId').value.trim());
