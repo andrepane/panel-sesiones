@@ -58,7 +58,7 @@ const cfg = {
   minutesAvailable: initialWeeklyMinutes,
   hoursAvailable: initialWeeklyMinutes / 60,
   rules: JSON.parse(localStorage.getItem('rules') || '{}'),
-  icalUrl: localStorage.getItem('icalUrl') || ''
+  clientId: localStorage.getItem('clientId') || ''
 };
 
 if(!Number.isFinite(cfg.hoursAvailable) || cfg.hoursAvailable <= 0){
@@ -69,7 +69,6 @@ if(!Number.isFinite(cfg.hoursAvailable) || cfg.hoursAvailable <= 0){
 const storedWeekStartIso = localStorage.getItem('weekStartISO') || '';
 
 const weekPicker = $('#week-picker');
-const weekHoursEl = $('#stat-week-hours');
 const weekDadasEl = $('#stat-dadas');
 const weekAusenciasEl = $('#stat-ausencias');
 const weekProgramadasEl = $('#stat-programadas');
@@ -79,37 +78,30 @@ const weekGinesEl = $('#stat-gines');
 const weekBormujosEl = $('#stat-bormujos');
 const weekPrivadoEl = $('#stat-privado');
 const hoursLabelEl = $('#hours-label');
-const monthHoursValueEl = $('#stat-month-hours');
+const pctLabelEl = $('#pct-label');
+const progressBarEl = $('#progress-bar');
 const monthDadasEl = $('#stat-month-dadas');
 const monthAusenciasEl = $('#stat-month-ausencias');
 const monthProgramadasEl = $('#stat-month-programadas');
+const monthOtrosEl = $('#stat-month-otros');
 const monthPctEl = $('#stat-month-pct');
+const monthOccupancyEl = $('#stat-month-occupancy');
 const monthLabelEl = $('#month-label');
 const monthHoursLabelEl = $('#month-hours-label');
-const yearHoursValueEl = $('#stat-year-hours');
 const yearDadasEl = $('#stat-year-dadas');
 const yearAusenciasEl = $('#stat-year-ausencias');
 const yearProgramadasEl = $('#stat-year-programadas');
+const yearOtrosEl = $('#stat-year-otros');
 const yearPctEl = $('#stat-year-pct');
+const yearOccupancyEl = $('#stat-year-occupancy');
 const yearLabelEl = $('#year-label');
 const yearHoursLabelEl = $('#year-hours-label');
 const loadingIndicatorEl = $('#loading-indicator');
 const statusFiltersEl = $('#status-filters');
 const centerFiltersEl = $('#center-filters');
 const hoursInputEl = $('#cfg-hours');
-const icalInputEl = $('#ical-url');
-const upcomingListEl = $('#upcoming-sessions');
-const upcomingInfoEl = $('#upcoming-info');
 const exportCsvBtn = $('#export-csv');
 const printViewBtn = $('#print-view');
-const refreshBtn = $('#refresh');
-const loadWeekBtn = $('#load-week');
-const prevWeekBtn = $('#prev-week');
-const nextWeekBtn = $('#next-week');
-const todayWeekBtn = $('#today-week');
-const tabButtons = document.querySelectorAll('.tab-btn');
-const tabContents = document.querySelectorAll('.tab-content');
-const saveIcalBtn = $('#save-ical');
 
 const FALLBACK_SESSION_REGEX = /^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$/i;
 
@@ -142,10 +134,6 @@ let activeCenterFilters = new Set(CENTER_FILTER_KEYS);
 let processedWeekEvents = [];
 let filteredWeekEvents = [];
 let loadingCounter = 0;
-let cachedIcsEvents = [];
-let cachedIcsUrl = cfg.icalUrl || '';
-let icsLoadingPromise = null;
-let icsLoadedOnce = false;
 
 function showLoading(){
   loadingCounter++;
@@ -184,6 +172,7 @@ function formatYearRangeText(range){
   return `Año ${fmtYear(range.start)} (${fmtDate(range.start)} - ${fmtDate(end)})`;
 }
 
+const MINUTES_PER_SESSION = 45;
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
 
 function minutesAvailableForRange(range){
@@ -193,157 +182,11 @@ function minutesAvailableForRange(range){
   return weeklyMinutes * (diffMs / WEEK_IN_MS);
 }
 
-async function fetchIcal() {
-  const res = await fetch('/api/ical');
-  if (!res.ok) throw new Error('Proxy error');
-  return await res.text();
-}
-
-
-function decodeIcsText(value=''){
-  return value
-    .replace(/\\n/g, '\n')
-    .replace(/\\,/g, ',')
-    .replace(/\\;/g, ';')
-    .replace(/\\\\/g, '\\');
-}
-
-function parseIcsDate(value='', params={}){
-  const val = String(value).trim();
-  if(!val){ return null; }
-  const upperParams = Object.fromEntries(
-    Object.entries(params).map(([k,v])=> [k.toUpperCase(), v])
-  );
-  const tz = upperParams.TZID || null;
-  const isDateOnly = upperParams.VALUE === 'DATE' || /^\d{8}$/.test(val);
-  if(isDateOnly){
-    return { date: `${val.slice(0,4)}-${val.slice(4,6)}-${val.slice(6,8)}` };
+function computeOccupancyPercent(minutesUsed, minutesAvailable){
+  if(!Number.isFinite(minutesUsed) || !Number.isFinite(minutesAvailable) || minutesAvailable <= 0){
+    return null;
   }
-  const zMatch = val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
-  if(zMatch){
-    const iso = `${zMatch[1]}-${zMatch[2]}-${zMatch[3]}T${zMatch[4]}:${zMatch[5]}:${zMatch[6]}Z`;
-    return { dateTime: iso };
-  }
-  const localMatch = val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/);
-  if(localMatch){
-    const iso = `${localMatch[1]}-${localMatch[2]}-${localMatch[3]}T${localMatch[4]}:${localMatch[5]}:${localMatch[6]}`;
-    const result = { dateTime: iso };
-    if(tz){ result.timeZone = tz; }
-    return result;
-  }
-  return { dateTime: val };
-}
-
-function eventsFromIcs(text){
-  if(typeof text !== 'string' || !text.trim()){ return []; }
-  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const rawLines = normalized.split('\n');
-  const lines = [];
-  rawLines.forEach(line=>{
-    if(line.startsWith(' ') || line.startsWith('\t')){
-      if(lines.length){ lines[lines.length - 1] += line.slice(1); }
-    }else{
-      lines.push(line.trimEnd());
-    }
-  });
-  const events = [];
-  let current = null;
-  lines.forEach(line=>{
-    if(line === 'BEGIN:VEVENT'){
-      current = {};
-      return;
-    }
-    if(line === 'END:VEVENT'){
-      if(current && (!current.status || current.status.toUpperCase() !== 'CANCELLED')){
-        const summary = decodeIcsText(current.summary || '');
-        const description = decodeIcsText(current.description || '');
-        const location = decodeIcsText(current.location || '');
-        const start = current.start || null;
-        const end = current.end || null;
-        if(start){
-          events.push({
-            uid: current.uid || null,
-            summary,
-            description,
-            location,
-            start,
-            end: end || start,
-            status: current.status || null
-          });
-        }
-      }
-      current = null;
-      return;
-    }
-    if(!current || !line){ return; }
-    const [rawKey, ...rest] = line.split(':');
-    if(rest.length === 0){ return; }
-    const value = rest.join(':');
-    const [propName, ...paramParts] = rawKey.split(';');
-    const params = {};
-    paramParts.forEach(part=>{
-      const [pKey, pVal] = part.split('=');
-      if(pKey){ params[pKey.toUpperCase()] = pVal; }
-    });
-    const key = propName.toUpperCase();
-    switch(key){
-      case 'DTSTART':
-        current.start = parseIcsDate(value, params);
-        break;
-      case 'DTEND':
-        current.end = parseIcsDate(value, params);
-        break;
-      case 'SUMMARY':
-        current.summary = value;
-        break;
-      case 'DESCRIPTION':
-        current.description = value;
-        break;
-      case 'LOCATION':
-        current.location = value;
-        break;
-      case 'UID':
-        current.uid = value;
-        break;
-      case 'STATUS':
-        current.status = value;
-        break;
-      default:
-        break;
-    }
-  });
-  return events;
-}
-
-async function loadIcsEvents(force=false){
-  const inputUrl = (icalInputEl?.value || cfg.icalUrl || '').trim();
-  if(!inputUrl){
-    throw new Error('Configura la URL iCal en Ajustes.');
-  }
-  if(!force && icsLoadedOnce && cachedIcsUrl === inputUrl){
-    return cachedIcsEvents;
-  }
-  if(!force && icsLoadingPromise && cachedIcsUrl === inputUrl){
-    return icsLoadingPromise;
-  }
-  const loader = (async()=>{
-    showLoading();
-    try{
-      const icsText = await fetchIcal(inputUrl);
-      const events = eventsFromIcs(icsText);
-      cachedIcsEvents = events;
-      cachedIcsUrl = inputUrl;
-      cfg.icalUrl = inputUrl;
-      localStorage.setItem('icalUrl', inputUrl);
-      icsLoadedOnce = true;
-      return events;
-    }finally{
-      hideLoading();
-      icsLoadingPromise = null;
-    }
-  })();
-  icsLoadingPromise = loader;
-  return loader;
+  return (minutesUsed / minutesAvailable) * 100;
 }
 
 function formatPercent(value){
@@ -371,24 +214,6 @@ function formatHoursValue(value){
   return trimTrailingZeros(value.toFixed(decimals));
 }
 
-function minutesToHhmm(min){
-  if(!Number.isFinite(min) || min < 0){
-    return '0:00 h';
-  }
-  const h = Math.floor(min / 60);
-  const m = Math.round(min % 60);
-  return `${h}:${String(m).padStart(2,'0')} h`;
-}
-
-function formatHoursDecimal(min){
-  if(!Number.isFinite(min) || min < 0){
-    return '–';
-  }
-  const hours = Math.round((min / 60) * 10) / 10;
-  const text = hours.toFixed(1).replace(/\.0$/, '');
-  return `${text} h`;
-}
-
 function formatHoursPair(usedMinutes, availableMinutes){
   const used = minutesToHours(usedMinutes);
   const available = minutesToHours(availableMinutes);
@@ -400,15 +225,20 @@ function formatHoursPair(usedMinutes, availableMinutes){
   return `${usedText} h / ${availableText} h`;
 }
 
-function formatDuration(mins, options={}){
-  const { compact = false } = options;
-  if(!Number.isFinite(mins) || mins <= 0){
-    return compact ? '0:00 h' : '0 h';
-  }
-  if(compact){
-    return minutesToHhmm(mins);
-  }
-  return formatHoursDecimal(mins);
+function formatDuration(mins){
+  if(!Number.isFinite(mins) || mins <= 0) return '0 min';
+  const hours = Math.floor(mins / 60);
+  const minutes = Math.round(mins - hours * 60);
+  const parts = [];
+  if(hours > 0){ parts.push(`${hours} h`); }
+  if(minutes > 0 || parts.length === 0){ parts.push(`${minutes} min`); }
+  return parts.join(' ');
+}
+
+function formatHoursDecimal(mins){
+  const hours = minutesToHours(mins);
+  if(!Number.isFinite(hours)) return '';
+  return trimTrailingZeros(hours.toFixed(2));
 }
 
 let week = null;
@@ -443,7 +273,7 @@ function setWeekFromDate(baseDate){
   yearSummaryToken++;
   resetMonthSummary();
   resetYearSummary();
-  loadWeek();
+  if(accessToken){ loadWeek(); }
 }
 
 function changeWeekBy(days){
@@ -454,44 +284,48 @@ function changeWeekBy(days){
 }
 
 function resetMonthSummary(text='—'){
-  monthHoursValueEl.textContent = '–';
   monthDadasEl.textContent = '–';
   monthAusenciasEl.textContent = '–';
   monthProgramadasEl.textContent = '–';
+  monthOtrosEl.textContent = '–';
   monthPctEl.textContent = '–';
+  monthOccupancyEl.textContent = '–';
   monthLabelEl.textContent = text;
   monthHoursLabelEl.textContent = '—';
   lastMonthSummaryData = null;
 }
 
 function setMonthSummaryLoading(range){
-  monthHoursValueEl.textContent = '…';
   monthDadasEl.textContent = '…';
   monthAusenciasEl.textContent = '…';
   monthProgramadasEl.textContent = '…';
+  monthOtrosEl.textContent = '…';
   monthPctEl.textContent = '…';
+  monthOccupancyEl.textContent = '…';
   monthLabelEl.textContent = range ? `Cargando ${formatMonthRangeText(range)}...` : 'Cargando resumen mensual...';
   monthHoursLabelEl.textContent = '…';
   lastMonthSummaryData = null;
 }
 
 function resetYearSummary(text='—'){
-  yearHoursValueEl.textContent = '–';
   yearDadasEl.textContent = '–';
   yearAusenciasEl.textContent = '–';
   yearProgramadasEl.textContent = '–';
+  yearOtrosEl.textContent = '–';
   yearPctEl.textContent = '–';
+  yearOccupancyEl.textContent = '–';
   yearLabelEl.textContent = text;
   yearHoursLabelEl.textContent = '—';
   lastYearSummaryData = null;
 }
 
 function setYearSummaryLoading(range){
-  yearHoursValueEl.textContent = '…';
   yearDadasEl.textContent = '…';
   yearAusenciasEl.textContent = '…';
   yearProgramadasEl.textContent = '…';
+  yearOtrosEl.textContent = '…';
   yearPctEl.textContent = '…';
+  yearOccupancyEl.textContent = '…';
   yearLabelEl.textContent = range ? `Cargando ${formatYearRangeText(range)}...` : 'Cargando resumen anual...';
   yearHoursLabelEl.textContent = '…';
   lastYearSummaryData = null;
@@ -507,9 +341,7 @@ if(hoursInputEl){
   const roundedHours = trimTrailingZeros(cfg.hoursAvailable.toFixed(2));
   hoursInputEl.value = roundedHours || '0';
 }
-if(icalInputEl){
-  icalInputEl.value = cfg.icalUrl || '';
-}
+$('#clientId').value = cfg.clientId;
 $('#rules-json').textContent = JSON.stringify(cfg.rules, null, 2);
 
 const initialWeekDate = storedWeekStartIso ? new Date(storedWeekStartIso) : new Date();
@@ -517,6 +349,57 @@ week = getWeekRange(Number.isNaN(initialWeekDate.getTime()) ? new Date() : initi
 updateWeekUI();
 resetMonthSummary();
 resetYearSummary();
+
+// ======== AUTH (GIS Token Client) ========
+let tokenClient = null; let accessToken = null; let calendars = [];
+
+function initTokenClient(){
+  const clientId = $('#clientId').value.trim();
+  if(!clientId){ alert('Introduce tu Google OAuth CLIENT_ID'); return; }
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: 'https://www.googleapis.com/auth/calendar.readonly',
+    prompt: '',
+    callback: (resp)=>{
+      if(resp && resp.access_token){ accessToken = resp.access_token; loadCalendars(); }
+      else alert('No se obtuvo access_token');
+    }
+  });
+}
+
+async function loadCalendars(){
+  try{
+    showLoading();
+    const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if(!res.ok){
+      const msg = await res.text();
+      throw new Error(`Error cargando calendarios (${res.status}): ${msg}`);
+    }
+    const data = await res.json();
+    calendars = data.items || [];
+    const sel = $('#calendar-select');
+    sel.innerHTML = '';
+    calendars.forEach(c=>{
+      const opt = document.createElement('option');
+      opt.value = c.id; opt.textContent = c.summary; sel.appendChild(opt);
+    });
+    const persistedCalendarId = localStorage.getItem('selectedCalendarId');
+    if(persistedCalendarId && calendars.some(c=> c.id === persistedCalendarId)){
+      sel.value = persistedCalendarId;
+    }else{
+      const lg = calendars.find(c=> (c.summary||'').toLowerCase().includes('andrea lg'));
+      if(lg){ sel.value = lg.id; }
+    }
+    if(calendars.length){ loadWeek(); }
+  }catch(err){
+    console.error(err);
+    alert('No se pudieron cargar los calendarios. Revisa la consola para más detalles.');
+  }finally{
+    hideLoading();
+  }
+}
 
 // ======== CLASIFICACIÓN ========
 function textFromEvent(ev){
@@ -699,15 +582,13 @@ function summarizeProcessedEvents(list){
     gines: 0,
     bormujos: 0,
     privado: 0,
-    totalMinutes: 0,
-    dadasMinutes: 0
+    totalMinutes: 0
   };
   list.forEach(item=>{
     summary.totalMinutes += item.mins;
     switch(item.estadoKey){
       case 'dada':
         summary.dadas++;
-        summary.dadasMinutes += item.mins;
         if(item.centroKey === 'gines') summary.gines++;
         else if(item.centroKey === 'bormujos') summary.bormujos++;
         else if(item.centroKey === 'privado') summary.privado++;
@@ -726,8 +607,8 @@ function summarizeProcessedEvents(list){
     }
   });
   summary.totalEventos = summary.dadas + summary.ausencias + summary.programadas + summary.enCurso + summary.otros;
-  summary.sessionMinutes = summary.dadasMinutes;
-  summary.sessionHours = minutesToHours(summary.dadasMinutes);
+  summary.sessionMinutes = summary.dadas * MINUTES_PER_SESSION;
+  summary.sessionHours = minutesToHours(summary.sessionMinutes);
   summary.totalHours = minutesToHours(summary.totalMinutes);
   return summary;
 }
@@ -796,18 +677,20 @@ function renderMonthSummary(events, range){
   const summary = summarizeProcessedEvents(processed);
   const totalSesiones = summary.dadas + summary.ausencias;
   const availableMinutes = minutesAvailableForRange(range);
+  const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
   const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
 
-  monthHoursValueEl.textContent = formatHoursDecimal(summary.dadasMinutes);
   monthDadasEl.textContent = String(summary.dadas);
   monthAusenciasEl.textContent = String(summary.ausencias);
   monthProgramadasEl.textContent = programadasTexto;
+  monthOtrosEl.textContent = String(summary.otros);
   const pct = totalSesiones > 0 ? (summary.dadas / totalSesiones) * 100 : null;
   monthPctEl.textContent = formatPercent(pct);
+  monthOccupancyEl.textContent = formatPercent(occupancy);
   const extras = summary.totalEventos > 0 ? ` · Total eventos: ${summary.totalEventos}` : '';
   const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
   monthLabelEl.textContent = `${formatMonthRangeText(range)}${extras}${enCursoText}`;
-  monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.dadasMinutes, availableMinutes) : formatHoursDecimal(summary.dadasMinutes);
+  monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
   lastMonthSummaryData = { summary, range };
 }
 
@@ -816,46 +699,51 @@ function renderYearSummary(events, range){
   const summary = summarizeProcessedEvents(processed);
   const totalSesiones = summary.dadas + summary.ausencias;
   const availableMinutes = minutesAvailableForRange(range);
+  const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
   const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
 
-  yearHoursValueEl.textContent = formatHoursDecimal(summary.dadasMinutes);
   yearDadasEl.textContent = String(summary.dadas);
   yearAusenciasEl.textContent = String(summary.ausencias);
   yearProgramadasEl.textContent = programadasTexto;
+  yearOtrosEl.textContent = String(summary.otros);
   const pct = totalSesiones > 0 ? (summary.dadas / totalSesiones) * 100 : null;
   yearPctEl.textContent = formatPercent(pct);
+  yearOccupancyEl.textContent = formatPercent(occupancy);
   const extras = summary.totalEventos > 0 ? ` · Total eventos: ${summary.totalEventos}` : '';
   const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
   yearLabelEl.textContent = `${formatYearRangeText(range)}${extras}${enCursoText}`;
-  yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.dadasMinutes, availableMinutes) : formatHoursDecimal(summary.dadasMinutes);
+  yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
   lastYearSummaryData = { summary, range };
 }
 
 // ======== CARGA DE EVENTOS ========
-async function fetchEventsForRange(range){
-  const events = await loadIcsEvents(false);
-  if(!Array.isArray(events)) return [];
-  return events
-    .filter(ev=>{
-      const startValue = ev.start?.dateTime || ev.start?.date;
-      if(!startValue) return false;
-      const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
-      return start >= range.start && start < range.end;
-    })
-    .sort((a,b)=>{
-      const aStart = new Date(a.start?.dateTime || (a.start?.date + 'T00:00:00'));
-      const bStart = new Date(b.start?.dateTime || (b.start?.date + 'T00:00:00'));
-      return aStart - bStart;
+async function fetchEventsForRange(calId, range){
+  showLoading();
+  try{
+    const params = new URLSearchParams({
+      singleEvents: 'true', orderBy: 'startTime', timeZone: TZ,
+      timeMin: range.start.toISOString(), timeMax: range.end.toISOString(), maxResults: '2500'
     });
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?${params.toString()}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }});
+    if(!res.ok){
+      const msg = await res.text();
+      throw new Error(`Error cargando eventos (${res.status}): ${msg}`);
+    }
+    const data = await res.json();
+    return (data.items||[]).filter(e=> !e.status || e.status!=='cancelled');
+  }finally{
+    hideLoading();
+  }
 }
 
-async function loadMonthSummary(){
+async function loadMonthSummary(calId){
   if(!week) return;
   const monthRange = getMonthRange(week.start);
   const token = ++monthSummaryToken;
   setMonthSummaryLoading(monthRange);
   try{
-    const events = await fetchEventsForRange(monthRange);
+    const events = await fetchEventsForRange(calId, monthRange);
     if(token !== monthSummaryToken) return;
     renderMonthSummary(events, monthRange);
   }catch(err){
@@ -866,13 +754,13 @@ async function loadMonthSummary(){
   }
 }
 
-async function loadYearSummary(){
+async function loadYearSummary(calId){
   if(!week) return;
   const yearRange = getYearRange(week.start);
   const token = ++yearSummaryToken;
   setYearSummaryLoading(yearRange);
   try{
-    const events = await fetchEventsForRange(yearRange);
+    const events = await fetchEventsForRange(calId, yearRange);
     if(token !== yearSummaryToken) return;
     renderYearSummary(events, yearRange);
   }catch(err){
@@ -883,7 +771,9 @@ async function loadYearSummary(){
   }
 }
 
-async function loadWeek({ force=false } = {}){
+async function loadWeek(){
+  const calId = $('#calendar-select').value || 'primary';
+  localStorage.setItem('selectedCalendarId', calId);
   monthSummaryToken++;
   yearSummaryToken++;
   if(week){
@@ -892,22 +782,21 @@ async function loadWeek({ force=false } = {}){
   }
   const token = ++weekRequestToken;
   try{
-    const events = await loadIcsEvents(force).then(()=> fetchEventsForRange(week));
+    const events = await fetchEventsForRange(calId, week);
     if(token !== weekRequestToken) return;
     render(events);
   }catch(err){
     if(token === weekRequestToken){
       console.error(err);
-      const extra = err?.message ? `\n${err.message}` : '';
-      alert(`No se pudieron cargar los eventos de la semana.${extra}`);
+      alert('No se pudieron cargar los eventos de la semana. Revisa la consola para más detalles.');
       resetMonthSummary();
       resetYearSummary();
     }
     return;
   }
   if(token === weekRequestToken){
-    loadMonthSummary();
-    loadYearSummary();
+    loadMonthSummary(calId);
+    loadYearSummary(calId);
   }
 }
 
@@ -918,11 +807,9 @@ function render(events){
   const summary = summarizeProcessedEvents(processedWeekEvents);
   updateWeeklyStats(summary);
   applyFilters();
-  updateUpcomingSessions();
 }
 
 function updateWeeklyStats(summary){
-  if(weekHoursEl) weekHoursEl.textContent = formatHoursDecimal(summary.dadasMinutes);
   if(weekDadasEl) weekDadasEl.textContent = String(summary.dadas);
   if(weekAusenciasEl) weekAusenciasEl.textContent = String(summary.ausencias);
   if(weekProgramadasEl) weekProgramadasEl.textContent = String(summary.programadas);
@@ -932,21 +819,28 @@ function updateWeeklyStats(summary){
   if(weekBormujosEl) weekBormujosEl.textContent = String(summary.bormujos);
   if(weekPrivadoEl) weekPrivadoEl.textContent = String(summary.privado);
   const availableMinutes = Number(cfg.minutesAvailable)||0;
+  const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
+  const pctText = formatPercent(occupancy);
+  const pctForBar = occupancy == null ? 0 : Math.max(0, Math.min(100, occupancy));
   if(hoursLabelEl) hoursLabelEl.textContent = formatHoursPair(summary.sessionMinutes, availableMinutes);
+  if(pctLabelEl) pctLabelEl.textContent = pctText;
+  if(progressBarEl) progressBarEl.style.width = pctForBar + '%';
 }
 
 function refreshStoredSummaries(){
   if(lastMonthSummaryData){
     const { summary, range } = lastMonthSummaryData;
     const availableMinutes = minutesAvailableForRange(range);
-    monthHoursValueEl.textContent = formatHoursDecimal(summary.dadasMinutes);
-    monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.dadasMinutes, availableMinutes) : formatHoursDecimal(summary.dadasMinutes);
+    const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
+    monthOccupancyEl.textContent = formatPercent(occupancy);
+    monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
   }
   if(lastYearSummaryData){
     const { summary, range } = lastYearSummaryData;
     const availableMinutes = minutesAvailableForRange(range);
-    yearHoursValueEl.textContent = formatHoursDecimal(summary.dadasMinutes);
-    yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.dadasMinutes, availableMinutes) : formatHoursDecimal(summary.dadasMinutes);
+    const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
+    yearOccupancyEl.textContent = formatPercent(occupancy);
+    yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
   }
 }
 
@@ -1022,7 +916,7 @@ function renderTableRows(list){
       tr.appendChild(tdTipo);
 
       const tdDuracion = document.createElement('td');
-      tdDuracion.textContent = formatHoursDecimal(item.mins);
+      tdDuracion.textContent = formatDuration(item.mins);
       tr.appendChild(tdDuracion);
 
       tbody.appendChild(tr);
@@ -1041,74 +935,16 @@ function renderTableRows(list){
   const cell3 = document.createElement('td');
   cell3.textContent = `Ausencias: ${subtotal.ausencias}`;
   const cell4 = document.createElement('td');
-  const subtotalSessionLabel = formatHoursDecimal(subtotal.dadasMinutes);
-  const subtotalTotalLabel = formatHoursDecimal(subtotal.totalMinutes);
-  cell4.textContent = `Horas impartidas: ${subtotalSessionLabel} · Duración total: ${subtotalTotalLabel}`;
+  const subtotalSessionHours = formatHoursValue(subtotal.sessionHours);
+  const subtotalTotalHours = formatHoursValue(subtotal.totalHours);
+  const subtotalSessionLabel = subtotalSessionHours === '–' ? '–' : `${subtotalSessionHours} h`;
+  const subtotalTotalLabel = subtotalTotalHours === '–' ? '–' : `${subtotalTotalHours} h`;
+  cell4.textContent = `Horas sesiones: ${subtotalSessionLabel} · Duración total: ${subtotalTotalLabel}`;
   subtotalRow.appendChild(cell1);
   subtotalRow.appendChild(cell2);
   subtotalRow.appendChild(cell3);
   subtotalRow.appendChild(cell4);
   tbody.appendChild(subtotalRow);
-}
-
-function updateUpcomingSessions(){
-  if(!upcomingListEl) return;
-  const allEvents = Array.isArray(cachedIcsEvents) ? cachedIcsEvents : [];
-  const now = new Date();
-  if(!allEvents.length){
-    upcomingListEl.innerHTML = '';
-    const empty = document.createElement('li');
-    empty.className = 'upcoming-empty';
-    empty.textContent = 'Añade tu URL iCal en Ajustes para ver las próximas sesiones.';
-    upcomingListEl.appendChild(empty);
-    if(upcomingInfoEl) upcomingInfoEl.textContent = 'Sin datos';
-    return;
-  }
-  const processed = processEventsCollection(allEvents, now);
-  const upcoming = processed
-    .filter(item=> item.tipo === 'sesión' && item.estadoKey !== 'ausencia' && item.end >= now)
-    .sort((a,b)=> a.start - b.start)
-    .slice(0, 5);
-  upcomingListEl.innerHTML = '';
-  if(upcoming.length === 0){
-    const empty = document.createElement('li');
-    empty.className = 'upcoming-empty';
-    empty.textContent = 'No hay sesiones pendientes.';
-    upcomingListEl.appendChild(empty);
-    if(upcomingInfoEl) upcomingInfoEl.textContent = 'Sin sesiones pendientes';
-    return;
-  }
-  if(upcomingInfoEl){
-    upcomingInfoEl.textContent = `${upcoming.length} próximas sesiones`;
-  }
-  upcoming.forEach(item=>{
-    const li = document.createElement('li');
-    li.className = 'upcoming-item';
-    const title = document.createElement('strong');
-    title.textContent = item.title;
-    li.appendChild(title);
-    const meta = document.createElement('div');
-    meta.className = 'upcoming-meta';
-    const dateSpan = document.createElement('span');
-    dateSpan.textContent = fmtDate(item.start);
-    meta.appendChild(dateSpan);
-    if(item.isAllDay){
-      const allDay = document.createElement('span');
-      allDay.textContent = 'Todo el día';
-      meta.appendChild(allDay);
-    }else{
-      const timeSpan = document.createElement('span');
-      timeSpan.textContent = `${fmtTime(item.start)} · ${formatDuration(item.mins, { compact: true })}`;
-      meta.appendChild(timeSpan);
-    }
-    if(item.centroLabel && item.centroLabel !== '—'){
-      const centroSpan = document.createElement('span');
-      centroSpan.textContent = item.centroLabel;
-      meta.appendChild(centroSpan);
-    }
-    li.appendChild(meta);
-    upcomingListEl.appendChild(li);
-  });
 }
 
 function syncFilterChips(){
@@ -1132,7 +968,6 @@ function syncFilterChips(){
 
 syncFilterChips();
 applyFilters();
-updateUpcomingSessions();
 
 function exportWeekToCsv(){
   if(!filteredWeekEvents.length){
@@ -1141,7 +976,6 @@ function exportWeekToCsv(){
   }
   const rows = [['Fecha','Inicio','Fin','Título','Centro','Estado','Tipo','Duración (h)']];
   filteredWeekEvents.forEach(item=>{
-    const durationHours = formatHoursDecimal(item.mins).replace(/\s*h$/, '');
     rows.push([
       fmtDate(item.start),
       item.isAllDay ? '—' : fmtTime(item.start),
@@ -1150,7 +984,7 @@ function exportWeekToCsv(){
       item.centroLabel || '—',
       item.estadoLabel,
       capitalize(item.tipo),
-      durationHours
+      formatHoursDecimal(item.mins)
     ]);
   });
   const csv = rows
@@ -1200,33 +1034,29 @@ exportCsvBtn?.addEventListener('click', exportWeekToCsv);
 printViewBtn?.addEventListener('click', triggerPrintView);
 window.addEventListener('afterprint', ()=> document.body.classList.remove('print-friendly'));
 
-function activateTab(tabId){
-  if(!tabId) return;
-  tabButtons.forEach(btn=>{
-    const isActive = btn.dataset.tab === tabId;
-    btn.classList.toggle('active', isActive);
-  });
-  tabContents.forEach(section=>{
-    const isActive = section.id === tabId;
-    section.classList.toggle('active', isActive);
-    section.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-  });
-}
-
-const defaultTab = document.querySelector('.tab-btn.active')?.dataset.tab || tabButtons[0]?.dataset.tab;
-if(defaultTab){ activateTab(defaultTab); }
-
-tabButtons.forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    activateTab(btn.dataset.tab);
-  });
+$('#signin').addEventListener('click', ()=>{
+  localStorage.setItem('clientId', $('#clientId').value.trim());
+  initTokenClient();
+  tokenClient?.requestAccessToken();
 });
 
-refreshBtn?.addEventListener('click', ()=> loadWeek({ force: true }));
-loadWeekBtn?.addEventListener('click', ()=> loadWeek({ force: true }));
-prevWeekBtn?.addEventListener('click', ()=> changeWeekBy(-7));
-nextWeekBtn?.addEventListener('click', ()=> changeWeekBy(7));
-todayWeekBtn?.addEventListener('click', ()=> setWeekFromDate(new Date()));
+$('#refresh').addEventListener('click', ()=>{
+  if(accessToken){
+    loadCalendars();
+  }else{
+    initTokenClient();
+    tokenClient?.requestAccessToken();
+  }
+});
+$('#load-week').addEventListener('click', ()=>{ if(!accessToken) return alert('Conéctate primero'); loadWeek(); });
+$('#calendar-select')?.addEventListener('change', (event)=>{
+  const value = event.target.value;
+  if(value) localStorage.setItem('selectedCalendarId', value);
+  if(accessToken){ loadWeek(); }
+});
+$('#prev-week')?.addEventListener('click', ()=> changeWeekBy(-7));
+$('#next-week')?.addEventListener('click', ()=> changeWeekBy(7));
+$('#today-week')?.addEventListener('click', ()=> setWeekFromDate(new Date()));
 weekPicker?.addEventListener('change', (event)=>{
   const value = event.target.value;
   const date = parseDateInputValue(value);
@@ -1247,23 +1077,6 @@ $('#save-cfg').addEventListener('click', ()=>{
     updateWeeklyStats(summarizeProcessedEvents(processedWeekEvents));
   }
   refreshStoredSummaries();
-});
-
-saveIcalBtn?.addEventListener('click', async ()=>{
-  const url = (icalInputEl?.value || '').trim();
-  if(!url){
-    alert('Introduce una URL iCal válida.');
-    return;
-  }
-  try{
-    await loadIcsEvents(true);
-    await loadWeek();
-    alert('URL iCal guardada y calendario actualizado.');
-  }catch(err){
-    console.error(err);
-    const extra = err?.message ? `\n${err.message}` : '';
-    alert(`No se pudo cargar el iCal proporcionado.${extra}`);
-  }
 });
 
 $('#save-rules').addEventListener('click', ()=>{
@@ -1303,11 +1116,8 @@ window.addEventListener('unhandledrejection', (event)=>{
   }
 });
 
+// Autocarga si ya hay token en memoria del navegador (GIS puede reutilizar sesión)
 window.addEventListener('load', ()=>{
-  if(cfg.icalUrl){
-    loadWeek();
-  }else{
-    activateTab('tab-settings');
-  }
+  if(cfg.clientId){ initTokenClient(); }
 });
 
