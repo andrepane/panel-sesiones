@@ -79,6 +79,17 @@ const weekPrivadoEl = $('#stat-privado');
 const weekTotalEl = $('#stat-week-total');
 const weekPctEl = $('#stat-week-pct');
 const weekShortfallEl = $('#stat-week-shortfall');
+const weekHoursLabelEl = (()=>{
+  if(!weekPctEl) return null;
+  const stat = weekPctEl.closest('.stat');
+  if(!stat) return null;
+  const candidates = stat.querySelectorAll('.stat-subtext');
+  for(const el of candidates){
+    if(el.id !== 'stat-week-shortfall') return el;
+  }
+  return null;
+})();
+if(weekHoursLabelEl){ weekHoursLabelEl.textContent = '—'; }
 const monthDadasEl = $('#stat-month-dadas');
 const monthAusenciasEl = $('#stat-month-ausencias');
 const monthProgramadasEl = $('#stat-month-programadas');
@@ -214,25 +225,22 @@ function formatYearRangeText(range){
 }
 
 const MINUTES_PER_SESSION = 45;
-const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
+const WEEK_H = 38.5;
+const MONTH_H = 154;
+const YEAR_H = WEEK_H * 52;
 
 function minutesAvailableForRange(range){
-  const weeklyMinutes = Number(cfg.minutesAvailable) || 0;
-  if(!range || weeklyMinutes <= 0) return 0;
-  const diffMs = Math.max(0, range.end - range.start);
-  return weeklyMinutes * (diffMs / WEEK_IN_MS);
+  if(!range) return 0;
+  const ms = range.end - range.start;
+  const day = 24 * 60 * 60 * 1000;
+  const min = (h)=> Math.round(h * 60);
+  if(ms >= 350 * day) return min(YEAR_H);
+  if(ms >= 27 * day) return min(MONTH_H);
+  return min(WEEK_H);
 }
 
-function resolveAvailableMinutes(summary, range){
-  const scheduleMinutes = Number(summary && summary.scheduleMinutes);
-  if(Number.isFinite(scheduleMinutes) && scheduleMinutes > 0){
-    return scheduleMinutes;
-  }
-  if(range){
-    return minutesAvailableForRange(range);
-  }
-  const configured = Number(cfg.minutesAvailable) || 0;
-  return configured > 0 ? configured : 0;
+function resolveAvailableMinutes(){
+  return minutesAvailableForRange(...arguments);
 }
 
 function formatPercent(value){
@@ -251,7 +259,7 @@ function calculateProductivityPercent(summary, availableMinutes){
   return (deliveredMinutes / available) * 100;
 }
 
-function calculateSessionsShortfall(summary, availableMinutes, targetPercent = 80){
+function calculateSessionsShortfall(summary, availableMinutes, targetPercent = 100){
   if(!summary) return null;
   const available = Number(availableMinutes);
   if(!Number.isFinite(available) || available <= 0) return null;
@@ -760,7 +768,7 @@ function analyzeEvent(ev, now = new Date()){
 function renderMonthSummary(events, range){
   const processed = processEventsCollection(events, new Date());
   const summary = summarizeProcessedEvents(processed);
-  const availableMinutes = resolveAvailableMinutes(summary, range);
+  const availableMinutes = minutesAvailableForRange(range);
   const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
   const totalPlaneadas = summary.dadas + summary.programadas + summary.enCurso;
   const pct = calculateProductivityPercent(summary, availableMinutes);
@@ -782,13 +790,13 @@ function renderMonthSummary(events, range){
   const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
   monthLabelEl.textContent = `${formatMonthRangeText(range)}${extras}${enCursoText}`;
   monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
-  lastMonthSummaryData = { summary: { ...summary }, range, availableMinutes };
+  lastMonthSummaryData = { summary: { ...summary }, range };
 }
 
 function renderYearSummary(events, range){
   const processed = processEventsCollection(events, new Date());
   const summary = summarizeProcessedEvents(processed);
-  const availableMinutes = resolveAvailableMinutes(summary, range);
+  const availableMinutes = minutesAvailableForRange(range);
   const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
 
   yearDadasEl.textContent = String(summary.dadas);
@@ -804,7 +812,7 @@ function renderYearSummary(events, range){
   const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
   yearLabelEl.textContent = `${formatYearRangeText(range)}${extras}${enCursoText}`;
   yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
-  lastYearSummaryData = { summary: { ...summary }, range, availableMinutes };
+  lastYearSummaryData = { summary: { ...summary }, range };
 }
 
 // ======== CARGA DE EVENTOS ========
@@ -909,7 +917,7 @@ function updateWeeklyStats(summary){
   if(weekBormujosEl) weekBormujosEl.textContent = String(summary.bormujos);
   if(weekPrivadoEl) weekPrivadoEl.textContent = String(summary.privado);
   const totalPlaneadas = summary.dadas + summary.programadas + summary.enCurso;
-  const availableMinutes = resolveAvailableMinutes(summary, week);
+  const availableMinutes = minutesAvailableForRange(week);
   const deliveredPercent = calculateProductivityPercent(summary, availableMinutes);
   const shortfall = calculateSessionsShortfall(summary, availableMinutes);
   if(weekTotalEl){
@@ -918,6 +926,9 @@ function updateWeeklyStats(summary){
   if(weekPctEl) weekPctEl.textContent = formatPercent(deliveredPercent);
   if(weekShortfallEl){
     weekShortfallEl.textContent = formatShortfallMessage(shortfall);
+  }
+  if(weekHoursLabelEl){
+    weekHoursLabelEl.textContent = formatHoursPair(summary.sessionMinutes, availableMinutes);
   }
   if(monthWeekMissingEl) monthWeekMissingEl.textContent = formatShortfallValue(shortfall);
   lastWeekSummaryData = {
@@ -928,17 +939,13 @@ function updateWeeklyStats(summary){
 
 function refreshStoredSummaries(){
   if(lastMonthSummaryData){
-    const { summary, range, availableMinutes: stored } = lastMonthSummaryData;
-    const availableMinutes = Number.isFinite(stored) && stored > 0
-      ? stored
-      : resolveAvailableMinutes(summary, range);
+    const { summary, range } = lastMonthSummaryData;
+    const availableMinutes = minutesAvailableForRange(range);
     monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
   }
   if(lastYearSummaryData){
-    const { summary, range, availableMinutes: stored } = lastYearSummaryData;
-    const availableMinutes = Number.isFinite(stored) && stored > 0
-      ? stored
-      : resolveAvailableMinutes(summary, range);
+    const { summary, range } = lastYearSummaryData;
+    const availableMinutes = minutesAvailableForRange(range);
     yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
   }
 }
