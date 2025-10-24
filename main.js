@@ -228,6 +228,7 @@ const MINUTES_PER_SESSION = 45;
 const WEEK_H = 38.5;
 const MONTH_H = 154;
 const YEAR_H = WEEK_H * 52;
+const PRODUCTIVITY_TARGET_PERCENT = 80;
 
 function minutesAvailableForRange(range){
   if(!range) return 0;
@@ -259,7 +260,7 @@ function calculateProductivityPercent(summary, availableMinutes){
   return (deliveredMinutes / available) * 100;
 }
 
-function calculateSessionsShortfall(summary, availableMinutes, targetPercent = 100){
+function calculateSessionsShortfall(summary, availableMinutes, targetPercent = PRODUCTIVITY_TARGET_PERCENT){
   if(!summary) return null;
   const available = Number(availableMinutes);
   if(!Number.isFinite(available) || available <= 0) return null;
