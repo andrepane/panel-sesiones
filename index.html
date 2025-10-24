@@ -51,19 +51,6 @@
               <h2>Resumen de productividad</h2>
               <span class="tag" id="week-label">Semana actual</span>
             </div>
-            <div class="highlight-group">
-              <div class="highlight-card">
-                <span class="highlight-label">Horas totales</span>
-                <span class="highlight-value" id="hours-label">– h / – h</span>
-              </div>
-              <div class="highlight-card">
-                <span class="highlight-label">Ocupación semanal</span>
-                <span class="highlight-value" id="pct-label">0%</span>
-              </div>
-            </div>
-          </div>
-          <div class="progress-wrapper">
-            <div class="progress"><span id="progress-bar"></span></div>
           </div>
 
           <div class="summary-panels">
@@ -83,12 +70,18 @@
                   <span class="value" id="stat-programadas">–</span>
                 </article>
                 <article class="stat">
+                  <span class="label">Sesiones totales (dadas + programadas)</span>
+                  <span class="value" id="stat-week-total">–</span>
+                </article>
+                <article class="stat">
                   <span class="label">Ausencias</span>
                   <span class="value" id="stat-ausencias">–</span>
                 </article>
                 <article class="stat">
-                  <span class="label">Otros eventos</span>
-                  <span class="value" id="stat-otros">–</span>
+                  <span class="label">% sesiones impartidas</span>
+                  <span class="value" id="stat-week-pct">–</span>
+                  <span class="stat-subtext">Objetivo: 80%</span>
+                  <span class="stat-subtext" id="stat-week-shortfall">Faltan — para alcanzar el objetivo</span>
                 </article>
               </div>
               <div class="stat-grid compact">
@@ -126,16 +119,14 @@
                   <span class="value" id="stat-month-programadas">–</span>
                 </article>
                 <article class="stat">
-                  <span class="label">Otros eventos</span>
-                  <span class="value" id="stat-month-otros">–</span>
+                  <span class="label">Sesiones totales (dadas + programadas)</span>
+                  <span class="value" id="stat-month-total">–</span>
                 </article>
                 <article class="stat">
                   <span class="label">% sesiones impartidas</span>
                   <span class="value" id="stat-month-pct">–</span>
-                </article>
-                <article class="stat">
-                  <span class="label">% ocupación</span>
-                  <span class="value" id="stat-month-occupancy">–</span>
+                  <span class="stat-subtext">Objetivo: 80%</span>
+                  <span class="stat-subtext" id="stat-month-shortfalls">Semana: faltan <span id="stat-month-week-missing">—</span> · Mes: faltan <span id="stat-month-missing">—</span></span>
                 </article>
               </div>
               <p class="muted" id="month-label">—</p>
@@ -160,16 +151,8 @@
                   <span class="value" id="stat-year-programadas">–</span>
                 </article>
                 <article class="stat">
-                  <span class="label">Otros eventos</span>
-                  <span class="value" id="stat-year-otros">–</span>
-                </article>
-                <article class="stat">
                   <span class="label">% sesiones impartidas</span>
                   <span class="value" id="stat-year-pct">–</span>
-                </article>
-                <article class="stat">
-                  <span class="label">% ocupación</span>
-                  <span class="value" id="stat-year-occupancy">–</span>
                 </article>
               </div>
               <p class="muted" id="year-label">—</p>

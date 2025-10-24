@@ -73,27 +73,25 @@ const weekDadasEl = $('#stat-dadas');
 const weekAusenciasEl = $('#stat-ausencias');
 const weekProgramadasEl = $('#stat-programadas');
 const weekEnCursoEl = $('#stat-en-curso');
-const weekOtrosEl = $('#stat-otros');
 const weekGinesEl = $('#stat-gines');
 const weekBormujosEl = $('#stat-bormujos');
 const weekPrivadoEl = $('#stat-privado');
-const hoursLabelEl = $('#hours-label');
-const pctLabelEl = $('#pct-label');
-const progressBarEl = $('#progress-bar');
+const weekTotalEl = $('#stat-week-total');
+const weekPctEl = $('#stat-week-pct');
+const weekShortfallEl = $('#stat-week-shortfall');
 const monthDadasEl = $('#stat-month-dadas');
 const monthAusenciasEl = $('#stat-month-ausencias');
 const monthProgramadasEl = $('#stat-month-programadas');
-const monthOtrosEl = $('#stat-month-otros');
 const monthPctEl = $('#stat-month-pct');
-const monthOccupancyEl = $('#stat-month-occupancy');
+const monthTotalEl = $('#stat-month-total');
+const monthWeekMissingEl = $('#stat-month-week-missing');
+const monthMissingEl = $('#stat-month-missing');
 const monthLabelEl = $('#month-label');
 const monthHoursLabelEl = $('#month-hours-label');
 const yearDadasEl = $('#stat-year-dadas');
 const yearAusenciasEl = $('#stat-year-ausencias');
 const yearProgramadasEl = $('#stat-year-programadas');
-const yearOtrosEl = $('#stat-year-otros');
 const yearPctEl = $('#stat-year-pct');
-const yearOccupancyEl = $('#stat-year-occupancy');
 const yearLabelEl = $('#year-label');
 const yearHoursLabelEl = $('#year-hours-label');
 const loadingIndicatorEl = $('#loading-indicator');
@@ -224,19 +222,44 @@ function minutesAvailableForRange(range){
   return weeklyMinutes * (diffMs / WEEK_IN_MS);
 }
 
-function computeOccupancyPercent(minutesUsed, minutesAvailable){
-  if(!Number.isFinite(minutesUsed) || !Number.isFinite(minutesAvailable) || minutesAvailable <= 0){
-    return null;
-  }
-  return (minutesUsed / minutesAvailable) * 100;
-}
-
 function formatPercent(value){
   if(!Number.isFinite(value) || value < 0){
     return '–';
   }
   const fixed = value.toFixed(1);
   return `${fixed.replace(/\.0$/, '')}%`;
+}
+
+function calculateDeliveredPercent(summary){
+  if(!summary) return null;
+  const total = Number(summary.dadas || 0) + Number(summary.programadas || 0);
+  if(!Number.isFinite(total) || total <= 0) return null;
+  return (Number(summary.dadas || 0) / total) * 100;
+}
+
+function calculateShortfall(summary, targetPercent = 80){
+  if(!summary) return null;
+  const total = Number(summary.dadas || 0) + Number(summary.programadas || 0);
+  if(!Number.isFinite(total) || total < 0) return null;
+  if(total === 0) return 0;
+  const targetSessions = Math.ceil((targetPercent / 100) * total);
+  return Math.max(0, targetSessions - Number(summary.dadas || 0));
+}
+
+function formatShortfallValue(value){
+  if(value == null || Number.isNaN(value)) return '—';
+  return String(value);
+}
+
+function formatShortfallMessage(value){
+  if(value == null || Number.isNaN(value)){
+    return 'Faltan — para alcanzar el objetivo';
+  }
+  if(value <= 0){
+    return 'Objetivo alcanzado';
+  }
+  const plural = value === 1 ? 'sesión' : 'sesiones';
+  return `Faltan ${value} ${plural} para alcanzar el objetivo`;
 }
 
 function trimTrailingZeros(text){
@@ -287,6 +310,7 @@ let week = null;
 let weekRequestToken = 0;
 let monthSummaryToken = 0;
 let yearSummaryToken = 0;
+let lastWeekSummaryData = null;
 let lastMonthSummaryData = null;
 let lastYearSummaryData = null;
 
@@ -329,9 +353,10 @@ function resetMonthSummary(text='—'){
   monthDadasEl.textContent = '–';
   monthAusenciasEl.textContent = '–';
   monthProgramadasEl.textContent = '–';
-  monthOtrosEl.textContent = '–';
+  if(monthTotalEl) monthTotalEl.textContent = '–';
   monthPctEl.textContent = '–';
-  monthOccupancyEl.textContent = '–';
+  if(monthWeekMissingEl) monthWeekMissingEl.textContent = '—';
+  if(monthMissingEl) monthMissingEl.textContent = '—';
   monthLabelEl.textContent = text;
   monthHoursLabelEl.textContent = '—';
   lastMonthSummaryData = null;
@@ -341,9 +366,10 @@ function setMonthSummaryLoading(range){
   monthDadasEl.textContent = '…';
   monthAusenciasEl.textContent = '…';
   monthProgramadasEl.textContent = '…';
-  monthOtrosEl.textContent = '…';
+  if(monthTotalEl) monthTotalEl.textContent = '…';
   monthPctEl.textContent = '…';
-  monthOccupancyEl.textContent = '…';
+  if(monthWeekMissingEl) monthWeekMissingEl.textContent = '…';
+  if(monthMissingEl) monthMissingEl.textContent = '…';
   monthLabelEl.textContent = range ? `Cargando ${formatMonthRangeText(range)}...` : 'Cargando resumen mensual...';
   monthHoursLabelEl.textContent = '…';
   lastMonthSummaryData = null;
@@ -353,9 +379,7 @@ function resetYearSummary(text='—'){
   yearDadasEl.textContent = '–';
   yearAusenciasEl.textContent = '–';
   yearProgramadasEl.textContent = '–';
-  yearOtrosEl.textContent = '–';
   yearPctEl.textContent = '–';
-  yearOccupancyEl.textContent = '–';
   yearLabelEl.textContent = text;
   yearHoursLabelEl.textContent = '—';
   lastYearSummaryData = null;
@@ -365,9 +389,7 @@ function setYearSummaryLoading(range){
   yearDadasEl.textContent = '…';
   yearAusenciasEl.textContent = '…';
   yearProgramadasEl.textContent = '…';
-  yearOtrosEl.textContent = '…';
   yearPctEl.textContent = '…';
-  yearOccupancyEl.textContent = '…';
   yearLabelEl.textContent = range ? `Cargando ${formatYearRangeText(range)}...` : 'Cargando resumen anual...';
   yearHoursLabelEl.textContent = '…';
   lastYearSummaryData = null;
@@ -717,18 +739,22 @@ function analyzeEvent(ev, now = new Date()){
 function renderMonthSummary(events, range){
   const processed = processEventsCollection(events, new Date());
   const summary = summarizeProcessedEvents(processed);
-  const totalSesiones = summary.dadas + summary.ausencias;
   const availableMinutes = minutesAvailableForRange(range);
-  const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
   const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
+  const totalPlaneadas = summary.dadas + summary.programadas;
+  const pct = calculateDeliveredPercent(summary);
+  const monthlyShortfall = calculateShortfall(summary);
+  const weeklyShortfall = calculateShortfall(lastWeekSummaryData);
 
   monthDadasEl.textContent = String(summary.dadas);
   monthAusenciasEl.textContent = String(summary.ausencias);
   monthProgramadasEl.textContent = programadasTexto;
-  monthOtrosEl.textContent = String(summary.otros);
-  const pct = totalSesiones > 0 ? (summary.dadas / totalSesiones) * 100 : null;
   monthPctEl.textContent = formatPercent(pct);
-  monthOccupancyEl.textContent = formatPercent(occupancy);
+  if(monthTotalEl){
+    monthTotalEl.textContent = Number.isFinite(totalPlaneadas) ? String(totalPlaneadas) : '–';
+  }
+  if(monthWeekMissingEl) monthWeekMissingEl.textContent = formatShortfallValue(weeklyShortfall);
+  if(monthMissingEl) monthMissingEl.textContent = formatShortfallValue(monthlyShortfall);
   const extras = summary.totalEventos > 0 ? ` · Total eventos: ${summary.totalEventos}` : '';
   const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
   monthLabelEl.textContent = `${formatMonthRangeText(range)}${extras}${enCursoText}`;
@@ -741,16 +767,13 @@ function renderYearSummary(events, range){
   const summary = summarizeProcessedEvents(processed);
   const totalSesiones = summary.dadas + summary.ausencias;
   const availableMinutes = minutesAvailableForRange(range);
-  const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
   const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
 
   yearDadasEl.textContent = String(summary.dadas);
   yearAusenciasEl.textContent = String(summary.ausencias);
   yearProgramadasEl.textContent = programadasTexto;
-  yearOtrosEl.textContent = String(summary.otros);
   const pct = totalSesiones > 0 ? (summary.dadas / totalSesiones) * 100 : null;
   yearPctEl.textContent = formatPercent(pct);
-  yearOccupancyEl.textContent = formatPercent(occupancy);
   const extras = summary.totalEventos > 0 ? ` · Total eventos: ${summary.totalEventos}` : '';
   const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
   yearLabelEl.textContent = `${formatYearRangeText(range)}${extras}${enCursoText}`;
@@ -856,32 +879,34 @@ function updateWeeklyStats(summary){
   if(weekAusenciasEl) weekAusenciasEl.textContent = String(summary.ausencias);
   if(weekProgramadasEl) weekProgramadasEl.textContent = String(summary.programadas);
   if(weekEnCursoEl) weekEnCursoEl.textContent = `En curso: ${summary.enCurso}`;
-  if(weekOtrosEl) weekOtrosEl.textContent = String(summary.otros);
   if(weekGinesEl) weekGinesEl.textContent = String(summary.gines);
   if(weekBormujosEl) weekBormujosEl.textContent = String(summary.bormujos);
   if(weekPrivadoEl) weekPrivadoEl.textContent = String(summary.privado);
-  const availableMinutes = Number(cfg.minutesAvailable)||0;
-  const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
-  const pctText = formatPercent(occupancy);
-  const pctForBar = occupancy == null ? 0 : Math.max(0, Math.min(100, occupancy));
-  if(hoursLabelEl) hoursLabelEl.textContent = formatHoursPair(summary.sessionMinutes, availableMinutes);
-  if(pctLabelEl) pctLabelEl.textContent = pctText;
-  if(progressBarEl) progressBarEl.style.width = pctForBar + '%';
+  const totalPlaneadas = summary.dadas + summary.programadas;
+  const deliveredPercent = calculateDeliveredPercent(summary);
+  const shortfall = calculateShortfall(summary);
+  if(weekTotalEl){
+    weekTotalEl.textContent = Number.isFinite(totalPlaneadas) ? String(totalPlaneadas) : '–';
+  }
+  if(weekPctEl) weekPctEl.textContent = formatPercent(deliveredPercent);
+  if(weekShortfallEl){
+    weekShortfallEl.textContent = totalPlaneadas === 0
+      ? 'Sin sesiones programadas'
+      : formatShortfallMessage(shortfall);
+  }
+  if(monthWeekMissingEl) monthWeekMissingEl.textContent = formatShortfallValue(shortfall);
+  lastWeekSummaryData = { ...summary };
 }
 
 function refreshStoredSummaries(){
   if(lastMonthSummaryData){
     const { summary, range } = lastMonthSummaryData;
     const availableMinutes = minutesAvailableForRange(range);
-    const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
-    monthOccupancyEl.textContent = formatPercent(occupancy);
     monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
   }
   if(lastYearSummaryData){
     const { summary, range } = lastYearSummaryData;
     const availableMinutes = minutesAvailableForRange(range);
-    const occupancy = computeOccupancyPercent(summary.sessionMinutes, availableMinutes);
-    yearOccupancyEl.textContent = formatPercent(occupancy);
     yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
   }
 }

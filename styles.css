@@ -177,49 +177,6 @@ body {
   color:var(--accent);
 }
 
-.highlight-group {
-  display:flex;
-  flex-wrap:wrap;
-  gap:16px;
-}
-
-.highlight-card {
-  min-width:180px;
-  padding:18px 22px;
-  border-radius:18px;
-  background:var(--surface-alt);
-  border:1px solid rgba(29,209,161,0.18);
-  box-shadow:0 18px 40px rgba(29,209,161,0.08);
-}
-
-.highlight-label { color:var(--text-muted); font-size:13px; letter-spacing:0.4px; text-transform:uppercase; }
-
-.highlight-value {
-  display:block;
-  margin-top:8px;
-  font-size:30px;
-  font-weight:700;
-  font-family:"Poppins", sans-serif;
-}
-
-.progress-wrapper { margin-top:-6px; }
-
-.progress {
-  height:12px;
-  border-radius:999px;
-  border:1px solid rgba(29,209,161,0.3);
-  background:var(--surface-alt);
-  overflow:hidden;
-}
-
-.progress > span {
-  display:block;
-  height:100%;
-  width:0;
-  background:linear-gradient(90deg, var(--accent), var(--accent-soft));
-  box-shadow:0 0 16px var(--accent-glow);
-}
-
 .summary-panels {
   display:grid;
   gap:22px;
