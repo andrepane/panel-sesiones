@@ -96,6 +96,10 @@ const weekTotalEl = $('#stat-week-total');
 const weekPctEl = $('#stat-week-pct');
 const weekPctDeltaEl = $('#stat-week-delta');
 const weekShortfallEl = $('#stat-week-shortfall');
+const weekNhEl = $('#stat-week-nh');
+const weekEntornoEl = $('#stat-week-entorno');
+const weekFamiliaEl = $('#stat-week-familia');
+const weekRecuperacionEl = $('#stat-week-recuperacion');
 const weekHoursLabelEl = (()=>{
   if(!weekPctEl) return null;
   const stat = weekPctEl.closest('.stat');
@@ -186,6 +190,8 @@ let activeCenterFilters = new Set(CENTER_FILTER_KEYS);
 let processedWeekEvents = [];
 let filteredWeekEvents = [];
 let loadingCounter = 0;
+let weeklyNarrativeCounters = createEmptyNarrativeCounters();
+let filteredNarrativeCounters = createEmptyNarrativeCounters();
 
 function activateView(viewKey=DEFAULT_VIEW){
   if(!viewPanels.length) return;
@@ -900,6 +906,30 @@ function processEventsCollection(events, now = new Date()){
   return processed;
 }
 
+function createEmptyNarrativeCounters(){
+  return { nh: 0, entorno: 0, familia: 0, recuperacion: 0 };
+}
+
+function buildNarrativeCounters(list){
+  const counters = createEmptyNarrativeCounters();
+  if(!Array.isArray(list)) return counters;
+  list.forEach((item)=>{
+    const raw = item?.raw;
+    if(!raw) return;
+    const summary = (raw.summary || '').trim();
+    if(summary && summary.toUpperCase().startsWith('+NH')){
+      counters.nh++;
+    }
+    const description = (raw.description || '').toLowerCase();
+    if(description){
+      if(description.includes('entorno')) counters.entorno++;
+      if(description.includes('familia')) counters.familia++;
+      if(description.includes('recuperación') || description.includes('recuperacion')) counters.recuperacion++;
+    }
+  });
+  return counters;
+}
+
 function summarizeProcessedEvents(list){
   const summary = {
     dadas: 0,
@@ -1129,6 +1159,9 @@ async function loadWeek(){
   localStorage.setItem('selectedCalendarId', calId);
   monthSummaryToken++;
   yearSummaryToken++;
+  weeklyNarrativeCounters = buildNarrativeCounters([]);
+  filteredNarrativeCounters = buildNarrativeCounters([]);
+  updateNarrativeCountersDisplay(filteredNarrativeCounters);
   if(week){
     setMonthSummaryLoading(getMonthRange(week.start));
     setYearSummaryLoading(getYearRange(week.start));
@@ -1157,6 +1190,7 @@ async function loadWeek(){
 function render(events){
   const now = new Date();
   processedWeekEvents = processEventsCollection(events, now);
+  weeklyNarrativeCounters = buildNarrativeCounters(processedWeekEvents);
   const summary = summarizeProcessedEvents(processedWeekEvents);
   updateWeeklyStats(summary);
   applyFilters();
@@ -1196,6 +1230,14 @@ function updateWeeklyStats(summary){
     summary: { ...summary },
     availableMinutes
   };
+}
+
+function updateNarrativeCountersDisplay(counters){
+  const data = counters || createEmptyNarrativeCounters();
+  if(weekNhEl) weekNhEl.textContent = String(data.nh ?? 0);
+  if(weekEntornoEl) weekEntornoEl.textContent = String(data.entorno ?? 0);
+  if(weekFamiliaEl) weekFamiliaEl.textContent = String(data.familia ?? 0);
+  if(weekRecuperacionEl) weekRecuperacionEl.textContent = String(data.recuperacion ?? 0);
 }
 
 function refreshStoredSummaries(){
@@ -1266,6 +1308,8 @@ function applyFilters(){
   if(!Array.isArray(processedWeekEvents)){ processedWeekEvents = []; }
   const filtered = processedWeekEvents.filter(item=> statusMatches(item) && centerMatches(item));
   filteredWeekEvents = filtered;
+  filteredNarrativeCounters = buildNarrativeCounters(filtered);
+  updateNarrativeCountersDisplay(filteredNarrativeCounters);
   renderTableRows(filtered);
 }
 
