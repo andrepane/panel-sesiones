@@ -96,7 +96,6 @@ const weekTotalEl = $('#stat-week-total');
 const weekPctEl = $('#stat-week-pct');
 const weekPctDeltaEl = $('#stat-week-delta');
 const weekShortfallEl = $('#stat-week-shortfall');
-const weekNhEl = $('#stat-week-nh');
 const weekEntornoEl = $('#stat-week-entorno');
 const weekFamiliaEl = $('#stat-week-familia');
 const weekRecuperacionEl = $('#stat-week-recuperacion');
@@ -907,7 +906,7 @@ function processEventsCollection(events, now = new Date()){
 }
 
 function createEmptyNarrativeCounters(){
-  return { nh: 0, entorno: 0, familia: 0, recuperacion: 0 };
+  return { entorno: 0, familia: 0, recuperacion: 0 };
 }
 
 function buildNarrativeCounters(list){
@@ -917,9 +916,7 @@ function buildNarrativeCounters(list){
     const raw = item?.raw;
     if(!raw) return;
     const summary = (raw.summary || '').trim();
-    if(summary && summary.toUpperCase().startsWith('+NH')){
-      counters.nh++;
-    }
+    if(!summary || summary.charAt(0) !== '+') return;
     const description = (raw.description || '').toLowerCase();
     if(description){
       if(description.includes('entorno')) counters.entorno++;
@@ -1234,7 +1231,6 @@ function updateWeeklyStats(summary){
 
 function updateNarrativeCountersDisplay(counters){
   const data = counters || createEmptyNarrativeCounters();
-  if(weekNhEl) weekNhEl.textContent = String(data.nh ?? 0);
   if(weekEntornoEl) weekEntornoEl.textContent = String(data.entorno ?? 0);
   if(weekFamiliaEl) weekFamiliaEl.textContent = String(data.familia ?? 0);
   if(weekRecuperacionEl) weekRecuperacionEl.textContent = String(data.recuperacion ?? 0);
