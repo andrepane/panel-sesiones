@@ -1250,11 +1250,53 @@ function refreshStoredSummaries(){
   if(lastMonthSummaryData){
     const { summary, range } = lastMonthSummaryData;
     const availableMinutes = minutesAvailableForRange(range);
+    const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
+    const totalPlaneadas = summary.dadas + summary.programadas + summary.enCurso;
+    const pct = calculateProductivityPercent(summary, availableMinutes);
+    const monthlyShortfall = calculateSessionsShortfall(summary, availableMinutes);
+    const weeklyShortfall = lastWeekSummaryData
+      ? calculateSessionsShortfall(lastWeekSummaryData.summary, lastWeekSummaryData.availableMinutes)
+      : null;
+
+    monthDadasEl.textContent = String(summary.dadas);
+    monthAusenciasEl.textContent = String(summary.ausencias);
+    monthProgramadasEl.textContent = programadasTexto;
+    monthPctEl.textContent = formatPercent(pct);
+    updatePercentIndicator({
+      element: monthPctEl,
+      deltaEl: monthPctDeltaEl,
+      view: 'mes',
+      referenceDate: range?.start,
+      value: pct
+    });
+    if(monthTotalEl){
+      monthTotalEl.textContent = Number.isFinite(totalPlaneadas) ? String(totalPlaneadas) : '–';
+    }
+    if(monthWeekMissingEl) monthWeekMissingEl.textContent = formatShortfallValue(weeklyShortfall);
+    if(monthMissingEl) monthMissingEl.textContent = formatShortfallValue(monthlyShortfall);
     monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
   }
   if(lastYearSummaryData){
     const { summary, range } = lastYearSummaryData;
     const availableMinutes = minutesAvailableForRange(range);
+    const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
+    const pct = calculateProductivityPercent(summary, availableMinutes);
+    const yearlyShortfall = calculateSessionsShortfall(summary, availableMinutes);
+
+    yearDadasEl.textContent = String(summary.dadas);
+    yearAusenciasEl.textContent = String(summary.ausencias);
+    yearProgramadasEl.textContent = programadasTexto;
+    yearPctEl.textContent = formatPercent(pct);
+    updatePercentIndicator({
+      element: yearPctEl,
+      deltaEl: yearPctDeltaEl,
+      view: 'ano',
+      referenceDate: range?.start,
+      value: pct
+    });
+    if(yearShortfallEl){
+      yearShortfallEl.textContent = formatShortfallMessage(yearlyShortfall);
+    }
     yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
   }
 }
