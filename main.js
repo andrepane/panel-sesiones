@@ -321,14 +321,24 @@ const MONTH_H = 154;
 const YEAR_H = WEEK_H * 52;
 const PRODUCTIVITY_TARGET_PERCENT = 80;
 
+function resolveConfiguredWeekHours(){
+  if(typeof cfg !== 'undefined' && Number.isFinite(cfg.hoursAvailable) && cfg.hoursAvailable > 0){
+    return cfg.hoursAvailable;
+  }
+  return WEEK_H;
+}
+
 function minutesAvailableForRange(range){
   if(!range) return 0;
   const ms = range.end - range.start;
   const day = 24 * 60 * 60 * 1000;
   const min = (h)=> Math.round(h * 60);
-  if(ms >= 350 * day) return min(YEAR_H);
-  if(ms >= 27 * day) return min(MONTH_H);
-  return min(WEEK_H);
+  const weekHours = resolveConfiguredWeekHours();
+  const monthHours = weekHours * 4;
+  const yearHours = weekHours * 52;
+  if(ms >= 350 * day) return min(yearHours);
+  if(ms >= 27 * day) return min(monthHours);
+  return min(weekHours);
 }
 
 function resolveAvailableMinutes(){
@@ -1579,4 +1589,3 @@ window.addEventListener('unhandledrejection', (event)=>{
 window.addEventListener('load', ()=>{
   initTokenClient();
 });
-
