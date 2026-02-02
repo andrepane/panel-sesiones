@@ -1036,10 +1036,29 @@ function centroPillClassFromKey(key){
   return 'gray';
 }
 
+function getAbsenceDiscountDates(events){
+  const dates = new Set();
+  if(!Array.isArray(events)) return dates;
+  events.forEach((ev)=>{
+    if(isExcluirTotal(ev)) return;
+    if(!isAbsenceDiscountEvent(ev)) return;
+    if(ev.start?.date){
+      dateKeysFromRange(ev.start.date, ev.end?.date).forEach((key)=> dates.add(key));
+      return;
+    }
+    const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
+    if(Number.isNaN(start.getTime())) return;
+    const key = dateKeyFromDate(start);
+    if(key) dates.add(key);
+  });
+  return dates;
+}
+
 function processEventsCollection(events, now = new Date()){
   const processed = [];
+  const discountDates = getAbsenceDiscountDates(events);
   events.forEach(ev=>{
-    const analyzed = analyzeEvent(ev, now);
+    const analyzed = analyzeEvent(ev, now, discountDates);
     if(analyzed){ processed.push(analyzed); }
   });
   return processed;
@@ -1121,7 +1140,7 @@ function summarizeProcessedEvents(list){
   return summary;
 }
 
-function analyzeEvent(ev, now = new Date()){
+function analyzeEvent(ev, now = new Date(), discountDates = new Set()){
   if(isExcluirTotal(ev)) return null;
   const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
   const end = new Date(ev.end.dateTime || (ev.end.date + 'T23:59:59'));
@@ -1134,6 +1153,8 @@ function analyzeEvent(ev, now = new Date()){
   let centroDisplay = '—';
   let privateAbsenceJustified = false;
   let privateAbsenceUnjustified = false;
+  const dateKey = ev.start?.date ? ev.start.date : dateKeyFromDate(start);
+  const isDiscountDay = dateKey ? discountDates.has(dateKey) : false;
 
   if(sp){
     tipo = 'sesión';
@@ -1146,13 +1167,17 @@ function analyzeEvent(ev, now = new Date()){
       centroDisplay = centroRaw && centroRaw !== '—' ? centroRaw : '—';
     }
     if(sp.absent && centroKey === 'privado'){
-      const justified = isPrivateAbsenceJustified(ev);
-      if(justified){
-        privateAbsenceJustified = true;
+      if(isDiscountDay){
         estadoKey = 'ausencia';
       }else{
-        privateAbsenceUnjustified = true;
-        estadoKey = 'dada';
+        const justified = isPrivateAbsenceJustified(ev);
+        if(justified){
+          privateAbsenceJustified = true;
+          estadoKey = 'ausencia';
+        }else{
+          privateAbsenceUnjustified = true;
+          estadoKey = 'dada';
+        }
       }
     }else if(sp.absent){
       estadoKey = 'ausencia';
