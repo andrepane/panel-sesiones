@@ -92,6 +92,8 @@ const weekEnCursoEl = $('#stat-en-curso');
 const weekGinesEl = $('#stat-gines');
 const weekBormujosEl = $('#stat-bormujos');
 const weekPrivadoEl = $('#stat-privado');
+const weekPrivadoJustEl = $('#stat-privado-just');
+const weekPrivadoNoJustEl = $('#stat-privado-nojust');
 const weekTotalEl = $('#stat-week-total');
 const weekPctEl = $('#stat-week-pct');
 const weekPctDeltaEl = $('#stat-week-delta');
@@ -112,6 +114,7 @@ const weekHoursLabelEl = (()=>{
 if(weekHoursLabelEl){ weekHoursLabelEl.textContent = '—'; }
 const monthDadasEl = $('#stat-month-dadas');
 const monthAusenciasEl = $('#stat-month-ausencias');
+const monthPrivadoAbsEl = $('#stat-month-privado-abs');
 const monthProgramadasEl = $('#stat-month-programadas');
 const monthPctEl = $('#stat-month-pct');
 const monthPctDeltaEl = $('#stat-month-delta');
@@ -122,6 +125,7 @@ const monthLabelEl = $('#month-label');
 const monthHoursLabelEl = $('#month-hours-label');
 const yearDadasEl = $('#stat-year-dadas');
 const yearAusenciasEl = $('#stat-year-ausencias');
+const yearPrivadoAbsEl = $('#stat-year-privado-abs');
 const yearProgramadasEl = $('#stat-year-programadas');
 const yearPctEl = $('#stat-year-pct');
 const yearPctDeltaEl = $('#stat-year-delta');
@@ -466,6 +470,15 @@ function formatPercent(value){
   return `${fixed.replace(/\.0$/, '')}%`;
 }
 
+function formatPrivateAbsenceSummary(summary){
+  const justified = Number(summary?.privadoAusenciasJustificadas ?? 0);
+  const unjustified = Number(summary?.privadoAusenciasNoJustificadas ?? 0);
+  if(!Number.isFinite(justified) || !Number.isFinite(unjustified)){
+    return '–';
+  }
+  return `${justified} / ${unjustified}`;
+}
+
 function calculateProductivityPercent(summary, availableMinutes){
   if(!summary) return null;
   const available = Number(availableMinutes);
@@ -712,6 +725,7 @@ function changeWeekBy(days){
 function resetMonthSummary(text='—'){
   monthDadasEl.textContent = '–';
   monthAusenciasEl.textContent = '–';
+  if(monthPrivadoAbsEl) monthPrivadoAbsEl.textContent = '–';
   monthProgramadasEl.textContent = '–';
   if(monthTotalEl) monthTotalEl.textContent = '–';
   monthPctEl.textContent = '–';
@@ -726,6 +740,7 @@ function resetMonthSummary(text='—'){
 function setMonthSummaryLoading(range){
   monthDadasEl.textContent = '…';
   monthAusenciasEl.textContent = '…';
+  if(monthPrivadoAbsEl) monthPrivadoAbsEl.textContent = '…';
   monthProgramadasEl.textContent = '…';
   if(monthTotalEl) monthTotalEl.textContent = '…';
   monthPctEl.textContent = '…';
@@ -740,6 +755,7 @@ function setMonthSummaryLoading(range){
 function resetYearSummary(text='—'){
   yearDadasEl.textContent = '–';
   yearAusenciasEl.textContent = '–';
+  if(yearPrivadoAbsEl) yearPrivadoAbsEl.textContent = '–';
   yearProgramadasEl.textContent = '–';
   yearPctEl.textContent = '–';
   clearPercentIndicator(yearPctEl, yearPctDeltaEl);
@@ -751,6 +767,7 @@ function resetYearSummary(text='—'){
 function setYearSummaryLoading(range){
   yearDadasEl.textContent = '…';
   yearAusenciasEl.textContent = '…';
+  if(yearPrivadoAbsEl) yearPrivadoAbsEl.textContent = '…';
   yearProgramadasEl.textContent = '…';
   yearPctEl.textContent = '…';
   clearPercentIndicator(yearPctEl, yearPctDeltaEl);
@@ -1060,6 +1077,8 @@ function summarizeProcessedEvents(list){
     gines: 0,
     bormujos: 0,
     privado: 0,
+    privadoAusenciasJustificadas: 0,
+    privadoAusenciasNoJustificadas: 0,
     totalMinutes: 0,
     scheduleMinutes: 0
   };
@@ -1087,6 +1106,12 @@ function summarizeProcessedEvents(list){
       default:
         summary.otros++;
     }
+    if(item.privateAbsenceJustified){
+      summary.privadoAusenciasJustificadas++;
+    }
+    if(item.privateAbsenceUnjustified){
+      summary.privadoAusenciasNoJustificadas++;
+    }
   });
   summary.totalEventos = summary.dadas + summary.ausencias + summary.programadas + summary.enCurso + summary.otros;
   summary.sessionMinutes = summary.dadas * MINUTES_PER_SESSION;
@@ -1107,6 +1132,8 @@ function analyzeEvent(ev, now = new Date()){
   let tipo = 'otro';
   let centroKey = null;
   let centroDisplay = '—';
+  let privateAbsenceJustified = false;
+  let privateAbsenceUnjustified = false;
 
   if(sp){
     tipo = 'sesión';
@@ -1118,8 +1145,15 @@ function analyzeEvent(ev, now = new Date()){
     }else{
       centroDisplay = centroRaw && centroRaw !== '—' ? centroRaw : '—';
     }
-    if(sp.absent && centroKey === 'privado' && !isPrivateAbsenceJustified(ev)){
-      estadoKey = 'dada';
+    if(sp.absent && centroKey === 'privado'){
+      const justified = isPrivateAbsenceJustified(ev);
+      if(justified){
+        privateAbsenceJustified = true;
+        estadoKey = 'ausencia';
+      }else{
+        privateAbsenceUnjustified = true;
+        estadoKey = 'dada';
+      }
     }else if(sp.absent){
       estadoKey = 'ausencia';
     }else if(end <= now){
@@ -1154,6 +1188,8 @@ function analyzeEvent(ev, now = new Date()){
     centroLabel: centroDisplay,
     centroClass: centroPillClassFromKey(centroKey),
     isAllDay: Boolean(ev.start.date),
+    privateAbsenceJustified,
+    privateAbsenceUnjustified,
   };
 }
 
@@ -1171,6 +1207,9 @@ function renderMonthSummary(events, range){
 
   monthDadasEl.textContent = String(summary.dadas);
   monthAusenciasEl.textContent = String(summary.ausencias);
+  if(monthPrivadoAbsEl){
+    monthPrivadoAbsEl.textContent = formatPrivateAbsenceSummary(summary);
+  }
   monthProgramadasEl.textContent = programadasTexto;
   monthPctEl.textContent = formatPercent(pct);
   updatePercentIndicator({
@@ -1200,6 +1239,9 @@ function renderYearSummary(events, range){
 
   yearDadasEl.textContent = String(summary.dadas);
   yearAusenciasEl.textContent = String(summary.ausencias);
+  if(yearPrivadoAbsEl){
+    yearPrivadoAbsEl.textContent = formatPrivateAbsenceSummary(summary);
+  }
   yearProgramadasEl.textContent = programadasTexto;
   const pct = calculateProductivityPercent(summary, availableMinutes);
   yearPctEl.textContent = formatPercent(pct);
@@ -1327,6 +1369,12 @@ function updateWeeklyStats(summary, events){
   if(weekGinesEl) weekGinesEl.textContent = String(summary.gines);
   if(weekBormujosEl) weekBormujosEl.textContent = String(summary.bormujos);
   if(weekPrivadoEl) weekPrivadoEl.textContent = String(summary.privado);
+  if(weekPrivadoJustEl){
+    weekPrivadoJustEl.textContent = `Ausencias just.: ${summary.privadoAusenciasJustificadas}`;
+  }
+  if(weekPrivadoNoJustEl){
+    weekPrivadoNoJustEl.textContent = `Ausencias no just.: ${summary.privadoAusenciasNoJustificadas}`;
+  }
   const totalPlaneadas = summary.dadas + summary.programadas + summary.enCurso;
   const availableMinutes = minutesAvailableForRange(week, events);
   const deliveredPercent = calculateProductivityPercent(summary, availableMinutes);
