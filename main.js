@@ -364,7 +364,9 @@ function isAbsenceDiscountEvent(ev){
 function isPrivateAbsenceJustified(ev){
   const keywords = cfg.rules.ausencias_justificadas || [];
   if(!keywords.length) return false;
-  return matchesAnyRegex(textFromEvent(ev), keywords);
+  const text = textFromEvent(ev);
+  if(matchesAnyRegex(text, ['no\\s+justificad'])) return false;
+  return matchesAnyRegex(text, keywords);
 }
 
 function calculateAbsenceReductionMinutes(events, range){
