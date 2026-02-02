@@ -355,27 +355,6 @@ function resolveConfiguredWeekHours(){
   return WEEK_H;
 }
 
-function defaultDayMinutes(){
-  const weekHours = resolveConfiguredWeekHours();
-  if(!Number.isFinite(weekHours) || weekHours <= 0) return 0;
-  return Math.round((weekHours / 5) * 60);
-}
-
-function buildScheduleMinutesByDate(events){
-  const schedule = new Map();
-  (events || []).forEach((ev)=>{
-    if(!isBloqueHorario(ev)) return;
-    const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
-    if(Number.isNaN(start.getTime())) return;
-    const mins = durationMinutes(ev);
-    if(!Number.isFinite(mins) || mins <= 0) return;
-    const key = ev.start.date ? ev.start.date : dateKeyFromDate(start);
-    if(!key) return;
-    schedule.set(key, (schedule.get(key) || 0) + mins);
-  });
-  return schedule;
-}
-
 function isAbsenceDiscountEvent(ev){
   const keywords = cfg.rules.ausencias_descuentan || [];
   if(!keywords.length) return false;
@@ -390,9 +369,6 @@ function isPrivateAbsenceJustified(ev){
 
 function calculateAbsenceReductionMinutes(events, range){
   if(!range || !Array.isArray(events) || events.length === 0) return 0;
-  const reductionsByDate = new Map();
-  const scheduleByDate = buildScheduleMinutesByDate(events);
-  const fallbackDayMinutes = defaultDayMinutes();
   const rangeStart = parseDateInputValue(formatDateInputValue(range.start));
   const rangeEnd = parseDateInputValue(formatDateInputValue(range.end));
   const isKeyInRange = (key)=>{
@@ -402,19 +378,7 @@ function calculateAbsenceReductionMinutes(events, range){
     return date >= rangeStart && date < rangeEnd;
   };
 
-  const setDayMinutes = (key, minutes)=>{
-    if(!key || !Number.isFinite(minutes) || minutes <= 0) return;
-    const current = reductionsByDate.get(key) || 0;
-    reductionsByDate.set(key, Math.max(current, minutes));
-  };
-
-  const addDayMinutes = (key, minutes, cap)=>{
-    if(!key || !Number.isFinite(minutes) || minutes <= 0) return;
-    const current = reductionsByDate.get(key) || 0;
-    const newValue = Math.min(cap, current + minutes);
-    reductionsByDate.set(key, newValue);
-  };
-
+  let total = 0;
   events.forEach((ev)=>{
     if(isExcluirTotal(ev)) return;
     if(!isAbsenceDiscountEvent(ev)) return;
@@ -422,8 +386,7 @@ function calculateAbsenceReductionMinutes(events, range){
       const keys = dateKeysFromRange(ev.start.date, ev.end?.date);
       keys.forEach((key)=>{
         if(!isKeyInRange(key)) return;
-        const dayMinutes = scheduleByDate.get(key) ?? fallbackDayMinutes;
-        setDayMinutes(key, dayMinutes);
+        total += 24 * 60;
       });
       return;
     }
@@ -431,14 +394,10 @@ function calculateAbsenceReductionMinutes(events, range){
     if(Number.isNaN(start.getTime())) return;
     const key = dateKeyFromDate(start);
     if(!isKeyInRange(key)) return;
-    const dayMinutes = scheduleByDate.get(key) ?? fallbackDayMinutes;
     const mins = durationMinutes(ev);
-    const cap = dayMinutes > 0 ? dayMinutes : mins;
-    addDayMinutes(key, Math.min(mins, cap), cap);
+    if(!Number.isFinite(mins) || mins <= 0) return;
+    total += mins;
   });
-
-  let total = 0;
-  reductionsByDate.forEach((minutes)=>{ total += minutes; });
   return total;
 }
 
