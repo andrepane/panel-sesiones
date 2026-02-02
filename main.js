@@ -166,7 +166,8 @@ const DEFAULT_RULES = {
   otros_excluir_totalmente: ["^g\s*:\s*\d+$","^b\s*:\s*\d+$","^ent\.\s*[bg]\s*:\s*\d+"],
   bloques_horario: ["^[bg]\s*\d{1,2}$"],
   otros_keywords: ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"],
-  ausencias_descuentan: ["festivo","vacaciones","baja"]
+  ausencias_descuentan: ["festivo","vacaciones","baja"],
+  ausencias_justificadas: ["justificada","justificación","justif","justific"]
 };
 
 const DEFAULT_SESSION_REGEX = (()=>{
@@ -373,6 +374,12 @@ function buildScheduleMinutesByDate(events){
 
 function isAbsenceDiscountEvent(ev){
   const keywords = cfg.rules.ausencias_descuentan || [];
+  if(!keywords.length) return false;
+  return matchesAnyRegex(textFromEvent(ev), keywords);
+}
+
+function isPrivateAbsenceJustified(ev){
+  const keywords = cfg.rules.ausencias_justificadas || [];
   if(!keywords.length) return false;
   return matchesAnyRegex(textFromEvent(ev), keywords);
 }
@@ -1111,7 +1118,9 @@ function analyzeEvent(ev, now = new Date()){
     }else{
       centroDisplay = centroRaw && centroRaw !== '—' ? centroRaw : '—';
     }
-    if(sp.absent){
+    if(sp.absent && centroKey === 'privado' && !isPrivateAbsenceJustified(ev)){
+      estadoKey = 'dada';
+    }else if(sp.absent){
       estadoKey = 'ausencia';
     }else if(end <= now){
       estadoKey = 'dada';
