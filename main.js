@@ -165,7 +165,8 @@ const DEFAULT_RULES = {
   pattern_sesion: FALLBACK_SESSION_REGEX.source,
   otros_excluir_totalmente: ["^g\s*:\s*\d+$","^b\s*:\s*\d+$","^ent\.\s*[bg]\s*:\s*\d+"],
   bloques_horario: ["^[bg]\s*\d{1,2}$"],
-  otros_keywords: ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"]
+  otros_keywords: ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"],
+  ausencias_descuentan: ["festivo","vacaciones","baja"]
 };
 
 const DEFAULT_SESSION_REGEX = (()=>{
@@ -188,6 +189,7 @@ let activeStatusFilters = new Set(['dada','ausencia']);
 let activeCenterFilters = new Set(CENTER_FILTER_KEYS);
 let processedWeekEvents = [];
 let filteredWeekEvents = [];
+let rawWeekEvents = [];
 let loadingCounter = 0;
 let weeklyNarrativeCounters = createEmptyNarrativeCounters();
 let filteredNarrativeCounters = createEmptyNarrativeCounters();
@@ -305,6 +307,26 @@ function parseDateInputValue(value){
   return new Date(year, month - 1, day);
 }
 
+function dateKeyFromDate(date){
+  if(!date) return '';
+  return date.toLocaleDateString('sv-SE', { timeZone: TZ });
+}
+
+function dateKeysFromRange(startDate, endDate){
+  if(!startDate) return [];
+  const start = parseDateInputValue(startDate);
+  if(!start) return [];
+  const end = parseDateInputValue(endDate);
+  const endDateValue = end || new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  const keys = [];
+  const cursor = new Date(start);
+  while(cursor < endDateValue){
+    keys.push(formatDateInputValue(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return keys;
+}
+
 function formatMonthRangeText(range){
   const end = new Date(range.end - 1);
   return `Mes de ${fmtMonthYear(range.start)} (${fmtDate(range.start)} - ${fmtDate(end)})`;
@@ -328,7 +350,88 @@ function resolveConfiguredWeekHours(){
   return WEEK_H;
 }
 
-function minutesAvailableForRange(range){
+function defaultDayMinutes(){
+  const weekHours = resolveConfiguredWeekHours();
+  if(!Number.isFinite(weekHours) || weekHours <= 0) return 0;
+  return Math.round((weekHours / 5) * 60);
+}
+
+function buildScheduleMinutesByDate(events){
+  const schedule = new Map();
+  (events || []).forEach((ev)=>{
+    if(!isBloqueHorario(ev)) return;
+    const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
+    if(Number.isNaN(start.getTime())) return;
+    const mins = durationMinutes(ev);
+    if(!Number.isFinite(mins) || mins <= 0) return;
+    const key = ev.start.date ? ev.start.date : dateKeyFromDate(start);
+    if(!key) return;
+    schedule.set(key, (schedule.get(key) || 0) + mins);
+  });
+  return schedule;
+}
+
+function isAbsenceDiscountEvent(ev){
+  const keywords = cfg.rules.ausencias_descuentan || [];
+  if(!keywords.length) return false;
+  return matchesAnyRegex(textFromEvent(ev), keywords);
+}
+
+function calculateAbsenceReductionMinutes(events, range){
+  if(!range || !Array.isArray(events) || events.length === 0) return 0;
+  const reductionsByDate = new Map();
+  const scheduleByDate = buildScheduleMinutesByDate(events);
+  const fallbackDayMinutes = defaultDayMinutes();
+  const rangeStart = parseDateInputValue(formatDateInputValue(range.start));
+  const rangeEnd = parseDateInputValue(formatDateInputValue(range.end));
+  const isKeyInRange = (key)=>{
+    if(!rangeStart || !rangeEnd) return true;
+    const date = parseDateInputValue(key);
+    if(!date) return false;
+    return date >= rangeStart && date < rangeEnd;
+  };
+
+  const setDayMinutes = (key, minutes)=>{
+    if(!key || !Number.isFinite(minutes) || minutes <= 0) return;
+    const current = reductionsByDate.get(key) || 0;
+    reductionsByDate.set(key, Math.max(current, minutes));
+  };
+
+  const addDayMinutes = (key, minutes, cap)=>{
+    if(!key || !Number.isFinite(minutes) || minutes <= 0) return;
+    const current = reductionsByDate.get(key) || 0;
+    const newValue = Math.min(cap, current + minutes);
+    reductionsByDate.set(key, newValue);
+  };
+
+  events.forEach((ev)=>{
+    if(isExcluirTotal(ev)) return;
+    if(!isAbsenceDiscountEvent(ev)) return;
+    if(ev.start?.date){
+      const keys = dateKeysFromRange(ev.start.date, ev.end?.date);
+      keys.forEach((key)=>{
+        if(!isKeyInRange(key)) return;
+        const dayMinutes = scheduleByDate.get(key) ?? fallbackDayMinutes;
+        setDayMinutes(key, dayMinutes);
+      });
+      return;
+    }
+    const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
+    if(Number.isNaN(start.getTime())) return;
+    const key = dateKeyFromDate(start);
+    if(!isKeyInRange(key)) return;
+    const dayMinutes = scheduleByDate.get(key) ?? fallbackDayMinutes;
+    const mins = durationMinutes(ev);
+    const cap = dayMinutes > 0 ? dayMinutes : mins;
+    addDayMinutes(key, Math.min(mins, cap), cap);
+  });
+
+  let total = 0;
+  reductionsByDate.forEach((minutes)=>{ total += minutes; });
+  return total;
+}
+
+function minutesAvailableForRange(range, events){
   if(!range) return 0;
   const ms = range.end - range.start;
   const day = 24 * 60 * 60 * 1000;
@@ -336,9 +439,12 @@ function minutesAvailableForRange(range){
   const weekHours = resolveConfiguredWeekHours();
   const monthHours = weekHours * 4;
   const yearHours = weekHours * 52;
-  if(ms >= 350 * day) return min(yearHours);
-  if(ms >= 27 * day) return min(monthHours);
-  return min(weekHours);
+  let baseMinutes = min(weekHours);
+  if(ms >= 350 * day) baseMinutes = min(yearHours);
+  else if(ms >= 27 * day) baseMinutes = min(monthHours);
+  if(!events) return baseMinutes;
+  const reduction = calculateAbsenceReductionMinutes(events, range);
+  return Math.max(0, baseMinutes - reduction);
 }
 
 function resolveAvailableMinutes(){
@@ -1045,7 +1151,7 @@ function analyzeEvent(ev, now = new Date()){
 function renderMonthSummary(events, range){
   const processed = processEventsCollection(events, new Date());
   const summary = summarizeProcessedEvents(processed);
-  const availableMinutes = minutesAvailableForRange(range);
+  const availableMinutes = minutesAvailableForRange(range, events);
   const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
   const totalPlaneadas = summary.dadas + summary.programadas + summary.enCurso;
   const pct = calculateProductivityPercent(summary, availableMinutes);
@@ -1074,13 +1180,13 @@ function renderMonthSummary(events, range){
   const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
   monthLabelEl.textContent = `${formatMonthRangeText(range)}${extras}${enCursoText}`;
   monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
-  lastMonthSummaryData = { summary: { ...summary }, range };
+  lastMonthSummaryData = { summary: { ...summary }, range, events };
 }
 
 function renderYearSummary(events, range){
   const processed = processEventsCollection(events, new Date());
   const summary = summarizeProcessedEvents(processed);
-  const availableMinutes = minutesAvailableForRange(range);
+  const availableMinutes = minutesAvailableForRange(range, events);
   const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
 
   yearDadasEl.textContent = String(summary.dadas);
@@ -1103,7 +1209,7 @@ function renderYearSummary(events, range){
   const enCursoText = summary.enCurso > 0 ? ` · En curso: ${summary.enCurso}` : '';
   yearLabelEl.textContent = `${formatYearRangeText(range)}${extras}${enCursoText}`;
   yearHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
-  lastYearSummaryData = { summary: { ...summary }, range };
+  lastYearSummaryData = { summary: { ...summary }, range, events };
 }
 
 // ======== CARGA DE EVENTOS ========
@@ -1196,14 +1302,15 @@ async function loadWeek(){
 // ======== RENDER ========
 function render(events){
   const now = new Date();
+  rawWeekEvents = Array.isArray(events) ? events : [];
   processedWeekEvents = processEventsCollection(events, now);
   weeklyNarrativeCounters = buildNarrativeCounters(processedWeekEvents);
   const summary = summarizeProcessedEvents(processedWeekEvents);
-  updateWeeklyStats(summary);
+  updateWeeklyStats(summary, rawWeekEvents);
   applyFilters();
 }
 
-function updateWeeklyStats(summary){
+function updateWeeklyStats(summary, events){
   if(weekDadasEl) weekDadasEl.textContent = String(summary.dadas);
   if(weekAusenciasEl) weekAusenciasEl.textContent = String(summary.ausencias);
   if(weekProgramadasEl) weekProgramadasEl.textContent = String(summary.programadas);
@@ -1212,7 +1319,7 @@ function updateWeeklyStats(summary){
   if(weekBormujosEl) weekBormujosEl.textContent = String(summary.bormujos);
   if(weekPrivadoEl) weekPrivadoEl.textContent = String(summary.privado);
   const totalPlaneadas = summary.dadas + summary.programadas + summary.enCurso;
-  const availableMinutes = minutesAvailableForRange(week);
+  const availableMinutes = minutesAvailableForRange(week, events);
   const deliveredPercent = calculateProductivityPercent(summary, availableMinutes);
   const shortfall = calculateSessionsShortfall(summary, availableMinutes);
   if(weekTotalEl){
@@ -1248,8 +1355,8 @@ function updateNarrativeCountersDisplay(counters){
 
 function refreshStoredSummaries(){
   if(lastMonthSummaryData){
-    const { summary, range } = lastMonthSummaryData;
-    const availableMinutes = minutesAvailableForRange(range);
+    const { summary, range, events } = lastMonthSummaryData;
+    const availableMinutes = minutesAvailableForRange(range, events);
     const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
     const totalPlaneadas = summary.dadas + summary.programadas + summary.enCurso;
     const pct = calculateProductivityPercent(summary, availableMinutes);
@@ -1277,8 +1384,8 @@ function refreshStoredSummaries(){
     monthHoursLabelEl.textContent = availableMinutes > 0 ? formatHoursPair(summary.sessionMinutes, availableMinutes) : '—';
   }
   if(lastYearSummaryData){
-    const { summary, range } = lastYearSummaryData;
-    const availableMinutes = minutesAvailableForRange(range);
+    const { summary, range, events } = lastYearSummaryData;
+    const availableMinutes = minutesAvailableForRange(range, events);
     const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
     const pct = calculateProductivityPercent(summary, availableMinutes);
     const yearlyShortfall = calculateSessionsShortfall(summary, availableMinutes);
@@ -1585,7 +1692,7 @@ $('#save-cfg').addEventListener('click', ()=>{
     hoursInputEl.value = trimTrailingZeros(sanitizedHours.toFixed(2));
   }
   if(processedWeekEvents.length){
-    updateWeeklyStats(summarizeProcessedEvents(processedWeekEvents));
+    updateWeeklyStats(summarizeProcessedEvents(processedWeekEvents), rawWeekEvents);
   }
   refreshStoredSummaries();
 });
