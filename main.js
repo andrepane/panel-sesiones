@@ -58,7 +58,6 @@ function setPercentColor(el, val){
 
 const storedHoursValue = localStorage.getItem('hoursAvailable');
 const storedMinutesValue = localStorage.getItem('minutesAvailable');
-const storedAvailabilityMode = localStorage.getItem('availabilityMode');
 let initialWeeklyMinutes = 2310;
 if(storedHoursValue !== null){
   const parsed = Number(storedHoursValue);
@@ -75,7 +74,6 @@ if(storedHoursValue !== null){
 const cfg = {
   minutesAvailable: initialWeeklyMinutes,
   hoursAvailable: initialWeeklyMinutes / 60,
-  availabilityMode: storedAvailabilityMode === 'bloques' ? 'bloques' : 'semanal',
   rules: JSON.parse(localStorage.getItem('rules') || '{}')
 };
 
@@ -138,7 +136,6 @@ const loadingIndicatorEl = $('#loading-indicator');
 const statusFiltersEl = $('#status-filters');
 const centerFiltersEl = $('#center-filters');
 const hoursInputEl = $('#cfg-hours');
-const hoursModeEl = $('#cfg-hours-mode');
 const exportCsvBtn = $('#export-csv');
 const printViewBtn = $('#print-view');
 const primaryTabButtons = document.querySelectorAll('nav.view-tabs[data-role="primary"] .tab');
@@ -406,46 +403,8 @@ function calculateAbsenceReductionMinutes(events, range){
   return total;
 }
 
-function calculateBlockMinutesForRange(events, range){
-  if(!range || !Array.isArray(events) || events.length === 0) return 0;
-  const rangeStart = range.start;
-  const rangeEnd = range.end;
-  if(!rangeStart || !rangeEnd) return 0;
-  let total = 0;
-  events.forEach((ev)=>{
-    if(isExcluirTotal(ev)) return;
-    if(!isBloqueHorario(ev)) return;
-    if(ev.start?.date) return;
-    const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
-    const end = new Date(ev.end.dateTime || (ev.end.date + 'T00:00:00'));
-    if(Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
-    const overlapStart = start < rangeStart ? rangeStart : start;
-    const overlapEnd = end > rangeEnd ? rangeEnd : end;
-    if(overlapEnd <= overlapStart) return;
-    total += Math.round((overlapEnd - overlapStart) / 60000);
-  });
-  return total;
-}
-
-function resolveAvailabilityMode(){
-  return cfg.availabilityMode === 'bloques' ? 'bloques' : 'semanal';
-}
-
-function setAvailabilityMode(mode){
-  const nextMode = mode === 'bloques' ? 'bloques' : 'semanal';
-  cfg.availabilityMode = nextMode;
-  localStorage.setItem('availabilityMode', nextMode);
-}
-
 function minutesAvailableForRange(range, events){
   if(!range) return 0;
-  const mode = resolveAvailabilityMode();
-  if(mode === 'bloques'){
-    const blockMinutes = calculateBlockMinutesForRange(events, range);
-    if(!events) return blockMinutes;
-    const reduction = calculateAbsenceReductionMinutes(events, range);
-    return Math.max(0, blockMinutes - reduction);
-  }
   const ms = range.end - range.start;
   const day = 24 * 60 * 60 * 1000;
   const min = (h)=> Math.round(h * 60);
@@ -1778,20 +1737,9 @@ $('#save-cfg').addEventListener('click', ()=>{
   cfg.minutesAvailable = Math.round(sanitizedHours * 60);
   localStorage.setItem('hoursAvailable', String(sanitizedHours));
   localStorage.setItem('minutesAvailable', String(cfg.minutesAvailable));
-  if(hoursModeEl){
-    setAvailabilityMode(hoursModeEl.value);
-  }
   if(hoursInputEl){
     hoursInputEl.value = trimTrailingZeros(sanitizedHours.toFixed(2));
   }
-  if(processedWeekEvents.length){
-    updateWeeklyStats(summarizeProcessedEvents(processedWeekEvents), rawWeekEvents);
-  }
-  refreshStoredSummaries();
-});
-
-hoursModeEl?.addEventListener('change', ()=>{
-  setAvailabilityMode(hoursModeEl.value);
   if(processedWeekEvents.length){
     updateWeeklyStats(summarizeProcessedEvents(processedWeekEvents), rawWeekEvents);
   }
