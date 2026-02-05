@@ -1060,7 +1060,8 @@ function summarizeProcessedEvents(list){
     privadoAusenciasJustificadas: 0,
     privadoAusenciasNoJustificadas: 0,
     totalMinutes: 0,
-    scheduleMinutes: 0
+    scheduleMinutes: 0,
+    sessionMinutes: 0
   };
   list.forEach(item=>{
     summary.totalMinutes += item.mins;
@@ -1073,6 +1074,9 @@ function summarizeProcessedEvents(list){
         if(item.centroKey === 'gines') summary.gines++;
         else if(item.centroKey === 'bormujos') summary.bormujos++;
         else if(item.centroKey === 'privado') summary.privado++;
+        if(item.tipo === 'sesión'){
+          summary.sessionMinutes += item.mins;
+        }
         break;
       case 'ausencia':
         summary.ausencias++;
@@ -1094,7 +1098,6 @@ function summarizeProcessedEvents(list){
     }
   });
   summary.totalEventos = summary.dadas + summary.ausencias + summary.programadas + summary.enCurso + summary.otros;
-  summary.sessionMinutes = summary.dadas * MINUTES_PER_SESSION;
   summary.sessionHours = minutesToHours(summary.sessionMinutes);
   summary.totalHours = minutesToHours(summary.totalMinutes);
   summary.scheduleHours = minutesToHours(summary.scheduleMinutes);
