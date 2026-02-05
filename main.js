@@ -171,7 +171,7 @@ const DEFAULT_RULES = {
   centros: { gines:["(g)"], bormujos:["(b)"], privado:["(p)"] },
   pattern_sesion: FALLBACK_SESSION_REGEX.source,
   otros_excluir_totalmente: ["^g\s*:\s*\d+$","^b\s*:\s*\d+$","^ent\.\s*[bg]\s*:\s*\d+"],
-  bloques_horario: ["^[a-z]{1,2}\\s*\\d{1,3}$"],
+  bloques_horario: ["^[bg]\s*\d{1,2}$"],
   otros_keywords: ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"],
   ausencias_descuentan: ["festivo","vacaciones","baja"],
   ausencias_justificadas: ["justificada","justificación","justif","justific"]
@@ -774,9 +774,6 @@ if(!cfg.rules || !cfg.rules.centros){ cfg.rules = cloneRules(DEFAULT_RULES); }
 if(hoursInputEl){
   const roundedHours = trimTrailingZeros(cfg.hoursAvailable.toFixed(2));
   hoursInputEl.value = roundedHours || '0';
-}
-if(hoursModeEl){
-  hoursModeEl.value = resolveAvailabilityMode();
 }
 $('#rules-json').textContent = JSON.stringify(cfg.rules, null, 2);
 
