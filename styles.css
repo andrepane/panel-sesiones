@@ -258,6 +258,11 @@ body {
   gap:6px;
 }
 
+.stat.forecast {
+  border-color:rgba(29,209,161,0.35);
+  box-shadow:0 12px 24px rgba(29,209,161,0.12);
+}
+
 .stat .label {
   color:var(--text-muted);
   font-size:13px;
