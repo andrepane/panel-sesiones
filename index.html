@@ -327,9 +327,13 @@
             <label class="muted" for="cfg-hours">Horas de jornada semanal</label>
             <div class="row compact">
               <input id="cfg-hours" type="number" min="0" step="0.25" value="38.5" />
+              <select id="cfg-hours-mode" aria-label="Modo de cálculo de horas">
+                <option value="semanal">Calcular con horas semanales × 4</option>
+                <option value="bloques">Calcular desde bloques de sala</option>
+              </select>
               <button id="save-cfg">Guardar</button>
             </div>
-            <p class="muted help-text">Ajusta la referencia semanal para la barra de ocupación. Puedes usar decimales para medias horas.</p>
+            <p class="muted help-text">Ajusta la referencia semanal para la barra de ocupación. El modo alternativo usa los bloques de sala para sumar horas reales por día.</p>
           </div>
 
           <div class="form-group">
@@ -351,7 +355,7 @@
     "^ent\\.\\s*[bg]\\s*:\\s*\\d+"
   ],
   "bloques_horario": [
-    "^[bg]\\s*\\d{1,2}$"
+    "^[a-z]{1,2}\\s*\\d{1,3}$"
   ],
   "otros_keywords": [
     "firma",
