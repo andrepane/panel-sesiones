@@ -98,6 +98,7 @@ const weekTotalEl = $('#stat-week-total');
 const weekPctEl = $('#stat-week-pct');
 const weekPctDeltaEl = $('#stat-week-delta');
 const weekShortfallEl = $('#stat-week-shortfall');
+const weekForecastEl = $('#stat-week-forecast');
 const weekEntornoEl = $('#stat-week-entorno');
 const weekFamiliaEl = $('#stat-week-familia');
 const weekRecuperacionEl = $('#stat-week-recuperacion');
@@ -119,6 +120,7 @@ const monthProgramadasEl = $('#stat-month-programadas');
 const monthPctEl = $('#stat-month-pct');
 const monthPctDeltaEl = $('#stat-month-delta');
 const monthTotalEl = $('#stat-month-total');
+const monthForecastEl = $('#stat-month-forecast');
 const monthWeekMissingEl = $('#stat-month-week-missing');
 const monthMissingEl = $('#stat-month-missing');
 const monthLabelEl = $('#month-label');
@@ -130,6 +132,7 @@ const yearProgramadasEl = $('#stat-year-programadas');
 const yearPctEl = $('#stat-year-pct');
 const yearPctDeltaEl = $('#stat-year-delta');
 const yearShortfallEl = $('#stat-year-shortfall');
+const yearForecastEl = $('#stat-year-forecast');
 const yearLabelEl = $('#year-label');
 const yearHoursLabelEl = $('#year-hours-label');
 const loadingIndicatorEl = $('#loading-indicator');
@@ -448,6 +451,15 @@ function calculateProductivityPercent(summary, availableMinutes){
   return (deliveredMinutes / available) * 100;
 }
 
+function calculateForecastPercent(summary, availableMinutes){
+  if(!summary) return null;
+  const available = Number(availableMinutes);
+  if(!Number.isFinite(available) || available <= 0) return null;
+  const deliveredMinutes = Number(summary.sessionMinutes || 0);
+  const scheduledMinutes = Number(summary.scheduledSessionMinutes || 0);
+  return ((deliveredMinutes + scheduledMinutes) / available) * 100;
+}
+
 function calculateSessionsShortfall(summary, availableMinutes, targetPercent = PRODUCTIVITY_TARGET_PERCENT){
   if(!summary) return null;
   const available = Number(availableMinutes);
@@ -691,6 +703,10 @@ function resetMonthSummary(text='—'){
   if(monthTotalEl) monthTotalEl.textContent = '–';
   monthPctEl.textContent = '–';
   clearPercentIndicator(monthPctEl, monthPctDeltaEl);
+  if(monthForecastEl){
+    monthForecastEl.textContent = '–';
+    setPercentColor(monthForecastEl, null);
+  }
   if(monthWeekMissingEl) monthWeekMissingEl.textContent = '—';
   if(monthMissingEl) monthMissingEl.textContent = '—';
   monthLabelEl.textContent = text;
@@ -706,6 +722,10 @@ function setMonthSummaryLoading(range){
   if(monthTotalEl) monthTotalEl.textContent = '…';
   monthPctEl.textContent = '…';
   clearPercentIndicator(monthPctEl, monthPctDeltaEl);
+  if(monthForecastEl){
+    monthForecastEl.textContent = '…';
+    setPercentColor(monthForecastEl, null);
+  }
   if(monthWeekMissingEl) monthWeekMissingEl.textContent = '…';
   if(monthMissingEl) monthMissingEl.textContent = '…';
   monthLabelEl.textContent = range ? `Cargando ${formatMonthRangeText(range)}...` : 'Cargando resumen mensual...';
@@ -720,6 +740,10 @@ function resetYearSummary(text='—'){
   yearProgramadasEl.textContent = '–';
   yearPctEl.textContent = '–';
   clearPercentIndicator(yearPctEl, yearPctDeltaEl);
+  if(yearForecastEl){
+    yearForecastEl.textContent = '–';
+    setPercentColor(yearForecastEl, null);
+  }
   yearLabelEl.textContent = text;
   yearHoursLabelEl.textContent = '—';
   lastYearSummaryData = null;
@@ -732,6 +756,10 @@ function setYearSummaryLoading(range){
   yearProgramadasEl.textContent = '…';
   yearPctEl.textContent = '…';
   clearPercentIndicator(yearPctEl, yearPctDeltaEl);
+  if(yearForecastEl){
+    yearForecastEl.textContent = '…';
+    setPercentColor(yearForecastEl, null);
+  }
   yearLabelEl.textContent = range ? `Cargando ${formatYearRangeText(range)}...` : 'Cargando resumen anual...';
   yearHoursLabelEl.textContent = '…';
   lastYearSummaryData = null;
@@ -1064,7 +1092,8 @@ function summarizeProcessedEvents(list){
     privadoAusenciasNoJustificadas: 0,
     totalMinutes: 0,
     scheduleMinutes: 0,
-    sessionMinutes: 0
+    sessionMinutes: 0,
+    scheduledSessionMinutes: 0
   };
   list.forEach(item=>{
     summary.totalMinutes += item.mins;
@@ -1086,9 +1115,15 @@ function summarizeProcessedEvents(list){
         break;
       case 'programada':
         summary.programadas++;
+        if(item.tipo === 'sesión'){
+          summary.scheduledSessionMinutes += item.mins;
+        }
         break;
       case 'en_curso':
         summary.enCurso++;
+        if(item.tipo === 'sesión'){
+          summary.scheduledSessionMinutes += item.mins;
+        }
         break;
       default:
         summary.otros++;
@@ -1192,6 +1227,7 @@ function renderMonthSummary(events, range){
   const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
   const totalPlaneadas = summary.dadas + summary.programadas + summary.enCurso;
   const pct = calculateProductivityPercent(summary, availableMinutes);
+  const forecastPct = calculateForecastPercent(summary, availableMinutes);
   const monthlyShortfall = calculateSessionsShortfall(summary, availableMinutes);
   const weeklyShortfall = lastWeekSummaryData
     ? calculateSessionsShortfall(lastWeekSummaryData.summary, lastWeekSummaryData.availableMinutes)
@@ -1211,6 +1247,10 @@ function renderMonthSummary(events, range){
     referenceDate: range?.start,
     value: pct
   });
+  if(monthForecastEl){
+    monthForecastEl.textContent = formatPercent(forecastPct);
+    setPercentColor(monthForecastEl, forecastPct);
+  }
   if(monthTotalEl){
     monthTotalEl.textContent = Number.isFinite(totalPlaneadas) ? String(totalPlaneadas) : '–';
   }
@@ -1228,6 +1268,7 @@ function renderYearSummary(events, range){
   const summary = summarizeProcessedEvents(processed);
   const availableMinutes = minutesAvailableForRange(range, events);
   const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
+  const forecastPct = calculateForecastPercent(summary, availableMinutes);
 
   yearDadasEl.textContent = String(summary.dadas);
   yearAusenciasEl.textContent = String(summary.ausencias);
@@ -1244,6 +1285,10 @@ function renderYearSummary(events, range){
     referenceDate: range?.start,
     value: pct
   });
+  if(yearForecastEl){
+    yearForecastEl.textContent = formatPercent(forecastPct);
+    setPercentColor(yearForecastEl, forecastPct);
+  }
   const yearlyShortfall = calculateSessionsShortfall(summary, availableMinutes);
   if(yearShortfallEl){
     yearShortfallEl.textContent = formatShortfallMessage(yearlyShortfall);
@@ -1370,6 +1415,7 @@ function updateWeeklyStats(summary, events){
   const totalPlaneadas = summary.dadas + summary.programadas + summary.enCurso;
   const availableMinutes = minutesAvailableForRange(week, events);
   const deliveredPercent = calculateProductivityPercent(summary, availableMinutes);
+  const forecastPercent = calculateForecastPercent(summary, availableMinutes);
   const shortfall = calculateSessionsShortfall(summary, availableMinutes);
   if(weekTotalEl){
     weekTotalEl.textContent = Number.isFinite(totalPlaneadas) ? String(totalPlaneadas) : '–';
@@ -1382,6 +1428,10 @@ function updateWeeklyStats(summary, events){
     referenceDate: week?.start,
     value: deliveredPercent
   });
+  if(weekForecastEl){
+    weekForecastEl.textContent = formatPercent(forecastPercent);
+    setPercentColor(weekForecastEl, forecastPercent);
+  }
   if(weekShortfallEl){
     weekShortfallEl.textContent = formatShortfallMessage(shortfall);
   }
@@ -1409,6 +1459,7 @@ function refreshStoredSummaries(){
     const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
     const totalPlaneadas = summary.dadas + summary.programadas + summary.enCurso;
     const pct = calculateProductivityPercent(summary, availableMinutes);
+    const forecastPct = calculateForecastPercent(summary, availableMinutes);
     const monthlyShortfall = calculateSessionsShortfall(summary, availableMinutes);
     const weeklyShortfall = lastWeekSummaryData
       ? calculateSessionsShortfall(lastWeekSummaryData.summary, lastWeekSummaryData.availableMinutes)
@@ -1425,6 +1476,10 @@ function refreshStoredSummaries(){
       referenceDate: range?.start,
       value: pct
     });
+    if(monthForecastEl){
+      monthForecastEl.textContent = formatPercent(forecastPct);
+      setPercentColor(monthForecastEl, forecastPct);
+    }
     if(monthTotalEl){
       monthTotalEl.textContent = Number.isFinite(totalPlaneadas) ? String(totalPlaneadas) : '–';
     }
@@ -1437,6 +1492,7 @@ function refreshStoredSummaries(){
     const availableMinutes = minutesAvailableForRange(range, events);
     const programadasTexto = summary.enCurso > 0 ? `${summary.programadas} (+${summary.enCurso} en curso)` : String(summary.programadas);
     const pct = calculateProductivityPercent(summary, availableMinutes);
+    const forecastPct = calculateForecastPercent(summary, availableMinutes);
     const yearlyShortfall = calculateSessionsShortfall(summary, availableMinutes);
 
     yearDadasEl.textContent = String(summary.dadas);
@@ -1450,6 +1506,10 @@ function refreshStoredSummaries(){
       referenceDate: range?.start,
       value: pct
     });
+    if(yearForecastEl){
+      yearForecastEl.textContent = formatPercent(forecastPct);
+      setPercentColor(yearForecastEl, forecastPct);
+    }
     if(yearShortfallEl){
       yearShortfallEl.textContent = formatShortfallMessage(yearlyShortfall);
     }
