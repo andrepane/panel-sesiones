@@ -341,10 +341,14 @@
           <div class="form-group">
             <label class="muted" for="cfg-hours">Horas de jornada semanal</label>
             <div class="row compact">
+              <select id="cfg-hours-mode" aria-label="Modo de cálculo de jornada">
+                <option value="fixed">Jornada fija (ajustes)</option>
+                <option value="effective_schedule">Horario efectivo (bloques)</option>
+              </select>
               <input id="cfg-hours" type="number" min="0" step="0.25" value="38.5" />
               <button id="save-cfg">Guardar</button>
             </div>
-            <p class="muted help-text">Ajusta la referencia semanal para la barra de ocupación. El cálculo mensual se obtiene multiplicando por 4.</p>
+            <p class="muted help-text">Modo fijo: usa las horas semanales que indiques aquí. Modo horario efectivo: calcula las horas disponibles según la suma de bloques del calendario (B4/G10/Gines 4/Bormujos 10, etc.).</p>
           </div>
 
           <div class="form-group">
@@ -366,7 +370,7 @@
     "^ent\\.\\s*[bg]\\s*:\\s*\\d+"
   ],
   "bloques_horario": [
-    "^[a-z]{1,2}\\s*\\d{1,3}$"
+    "^(?:[bg]\\s*\\d{1,2}|(?:gines|bormujos)\\s*\\d{1,2})$"
   ],
   "otros_keywords": [
     "firma",
