@@ -471,19 +471,21 @@ function calculateEffectiveScheduleMinutes(events, range){
 function minutesAvailableForRange(range, events){
   if(!range) return 0;
   const mode = resolveHoursCalculationMode();
+  let baseMinutes = 0;
   if(mode === 'effective_schedule'){
-    return calculateEffectiveScheduleMinutes(events, range);
+    baseMinutes = calculateEffectiveScheduleMinutes(events, range);
+  }else{
+    const ms = range.end - range.start;
+    const day = 24 * 60 * 60 * 1000;
+    const min = (h)=> Math.round(h * 60);
+    const weekHours = resolveConfiguredWeekHours();
+    const monthHours = weekHours * 4;
+    const yearHours = weekHours * 52;
+    baseMinutes = min(weekHours);
+    if(ms >= 350 * day) baseMinutes = min(yearHours);
+    else if(ms >= 27 * day) baseMinutes = min(monthHours);
   }
 
-  const ms = range.end - range.start;
-  const day = 24 * 60 * 60 * 1000;
-  const min = (h)=> Math.round(h * 60);
-  const weekHours = resolveConfiguredWeekHours();
-  const monthHours = weekHours * 4;
-  const yearHours = weekHours * 52;
-  let baseMinutes = min(weekHours);
-  if(ms >= 350 * day) baseMinutes = min(yearHours);
-  else if(ms >= 27 * day) baseMinutes = min(monthHours);
   if(!events) return baseMinutes;
   const reduction = calculateAbsenceReductionMinutes(events, range);
   return Math.max(0, baseMinutes - reduction);
