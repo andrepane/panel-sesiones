@@ -350,8 +350,6 @@ function formatYearRangeText(range){
 
 const MINUTES_PER_SESSION = 45;
 const WEEK_H = 38.5;
-const MONTH_H = 154;
-const YEAR_H = WEEK_H * 52;
 const PRODUCTIVITY_TARGET_PERCENT = 80;
 
 function resolveConfiguredWeekHours(){
@@ -427,66 +425,42 @@ function calculateAbsenceReductionMinutes(events, range){
 }
 
 function calculateEffectiveScheduleMinutes(events, range){
-  if(!range || !Array.isArray(events) || events.length === 0) return 0;
-  const rangeStart = range.start.getTime();
-  const rangeEnd = range.end.getTime();
-  if(!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd) || rangeEnd <= rangeStart){
-    return 0;
-  }
-
-  const intervals = [];
-  events.forEach((ev)=>{
-    if(isExcluirTotal(ev)) return;
-    if(!isEffectiveScheduleBlock(ev)) return;
-    const start = new Date(ev.start?.dateTime || (ev.start?.date + 'T00:00:00'));
-    const end = new Date(ev.end?.dateTime || (ev.end?.date + 'T23:59:59'));
-    const startMs = start.getTime();
-    const endMs = end.getTime();
-    if(!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
-    const clippedStart = Math.max(startMs, rangeStart);
-    const clippedEnd = Math.min(endMs, rangeEnd);
-    if(clippedEnd <= clippedStart) return;
-    intervals.push([clippedStart, clippedEnd]);
+  if(typeof HoursCalculation === 'undefined') return 0;
+  return HoursCalculation.calculateEffectiveBaseMinutes(events, range, {
+    isExcluded: isExcluirTotal,
+    isEffectiveBlock: isEffectiveScheduleBlock,
+    getStartMs: (ev)=> new Date(ev.start?.dateTime || (ev.start?.date + 'T00:00:00')).getTime(),
+    getEndMs: (ev)=> new Date(ev.end?.dateTime || (ev.end?.date + 'T23:59:59')).getTime()
   });
+}
 
-  if(!intervals.length) return 0;
-  intervals.sort((a, b)=> a[0] - b[0]);
-
-  let totalMs = 0;
-  let [currentStart, currentEnd] = intervals[0];
-  for(let i = 1; i < intervals.length; i += 1){
-    const [start, end] = intervals[i];
-    if(start <= currentEnd){
-      currentEnd = Math.max(currentEnd, end);
-      continue;
-    }
-    totalMs += currentEnd - currentStart;
-    currentStart = start;
-    currentEnd = end;
+function calculateBaseMinutesForRange(range, events, mode = resolveHoursCalculationMode()){
+  if(!range) return 0;
+  if(mode === 'effective_schedule'){
+    return calculateEffectiveScheduleMinutes(events, range);
   }
-  totalMs += currentEnd - currentStart;
-  return Math.round(totalMs / 60000);
+  const weeklyHours = resolveConfiguredWeekHours();
+  if(typeof HoursCalculation === 'undefined'){
+    return Math.round(weeklyHours * 60);
+  }
+  return HoursCalculation.calculateFixedBaseMinutes(range, weeklyHours);
+}
+
+function applyFinalAvailabilityAdjustments(baseMinutes, events, range){
+  const reduction = Array.isArray(events) ? calculateAbsenceReductionMinutes(events, range) : 0;
+  if(typeof HoursCalculation === 'undefined'){
+    return Math.max(0, baseMinutes - reduction);
+  }
+  return HoursCalculation.applyCommonAvailabilityAdjustments(baseMinutes, {
+    absenceReductionMinutes: reduction
+  });
 }
 
 function minutesAvailableForRange(range, events){
   if(!range) return 0;
   const mode = resolveHoursCalculationMode();
-  if(mode === 'effective_schedule'){
-    return calculateEffectiveScheduleMinutes(events, range);
-  }
-
-  const ms = range.end - range.start;
-  const day = 24 * 60 * 60 * 1000;
-  const min = (h)=> Math.round(h * 60);
-  const weekHours = resolveConfiguredWeekHours();
-  const monthHours = weekHours * 4;
-  const yearHours = weekHours * 52;
-  let baseMinutes = min(weekHours);
-  if(ms >= 350 * day) baseMinutes = min(yearHours);
-  else if(ms >= 27 * day) baseMinutes = min(monthHours);
-  if(!events) return baseMinutes;
-  const reduction = calculateAbsenceReductionMinutes(events, range);
-  return Math.max(0, baseMinutes - reduction);
+  const baseMinutes = calculateBaseMinutesForRange(range, events, mode);
+  return applyFinalAvailabilityAdjustments(baseMinutes, events, range);
 }
 
 function resolveAvailableMinutes(){
