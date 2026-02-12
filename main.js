@@ -437,7 +437,7 @@ function calculateEffectiveScheduleMinutes(events, range){
   const intervals = [];
   events.forEach((ev)=>{
     if(isExcluirTotal(ev)) return;
-    if(!isBloqueHorario(ev)) return;
+    if(!isEffectiveScheduleBlock(ev)) return;
     const start = new Date(ev.start?.dateTime || (ev.start?.date + 'T00:00:00'));
     const end = new Date(ev.end?.dateTime || (ev.end?.date + 'T23:59:59'));
     const startMs = start.getTime();
@@ -1039,6 +1039,13 @@ function sessionParse(ev){
 function isBloqueHorario(ev){
   const t = (ev.summary||'').trim();
   return matchesAnyRegex(t, cfg.rules.bloques_horario||[]);
+}
+
+function isEffectiveScheduleBlock(ev){
+  const title = (ev?.summary || '').trim();
+  if(!title) return false;
+  if(isBloqueHorario(ev)) return true;
+  return /^(?:[bg]\s*\d{1,3}|(?:gines|gin[eé]s|bormujos)\s*\d{1,3})$/i.test(title);
 }
 function isExcluirTotal(ev){
   const t = (ev.summary||'').trim();
@@ -1858,7 +1865,12 @@ weekPicker?.addEventListener('change', (event)=>{
 hoursModeEl?.addEventListener('change', (event)=>{
   const value = event.target.value === 'effective_schedule' ? 'effective_schedule' : 'fixed';
   cfg.hoursCalculationMode = value;
+  localStorage.setItem('hoursCalculationMode', value);
   updateHoursModeUI();
+  if(processedWeekEvents.length){
+    updateWeeklyStats(summarizeProcessedEvents(processedWeekEvents), rawWeekEvents);
+  }
+  refreshStoredSummaries();
 });
 
 $('#save-cfg').addEventListener('click', ()=>{
