@@ -323,13 +323,13 @@
               </article>
               <article>
                 <h3>Festivos, vacaciones y bajas</h3>
-                <p class="muted">Crea un evento de día completo con “festivo”, “vacaciones” o “baja”.</p>
-                <p class="muted">Estos eventos descuentan horas disponibles automáticamente.</p>
+                <p class="muted">Para descontar horas, crea un bloque en tu calendario con el nombre exacto <strong>festivo</strong>, <strong>vacaciones</strong> o <strong>baja</strong>.</p>
+                <p class="muted">Ese bloque debe tener exactamente el mismo horario que tu jornada laboral de ese día para que el descuento sea correcto.</p>
               </article>
               <article>
                 <h3>Horas de jornada</h3>
                 <p class="muted">Define tus horas semanales en <strong>Horas de jornada semanal</strong>.</p>
-                <p class="muted">Esto ajusta la barra de ocupación y los objetivos de productividad.</p>
+                <p class="muted"><strong>Jornada fija</strong>: usa el total semanal que indiques manualmente. <strong>Horario efectivo</strong>: calcula las horas disponibles a partir de los bloques de horario en el calendario.</p>
               </article>
             </div>
           </div>
@@ -338,8 +338,8 @@
             <label class="muted" for="cfg-hours">Horas de jornada semanal</label>
             <div class="row compact">
               <select id="cfg-hours-mode" aria-label="Modo de cálculo de jornada">
-                <option value="fixed">Jornada fija (ajustes)</option>
-                <option value="effective_schedule">Horario efectivo (bloques)</option>
+                <option value="fixed">Jornada fija</option>
+                <option value="effective_schedule">Horario efectivo</option>
               </select>
               <input id="cfg-hours" type="number" min="0" step="0.25" value="38.5" />
               <button id="save-cfg">Guardar</button>
