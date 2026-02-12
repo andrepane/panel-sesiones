@@ -58,6 +58,7 @@ function setPercentColor(el, val){
 
 const storedHoursValue = localStorage.getItem('hoursAvailable');
 const storedMinutesValue = localStorage.getItem('minutesAvailable');
+const storedHoursMode = localStorage.getItem('hoursCalculationMode');
 let initialWeeklyMinutes = 2310;
 if(storedHoursValue !== null){
   const parsed = Number(storedHoursValue);
@@ -74,6 +75,7 @@ if(storedHoursValue !== null){
 const cfg = {
   minutesAvailable: initialWeeklyMinutes,
   hoursAvailable: initialWeeklyMinutes / 60,
+  hoursCalculationMode: storedHoursMode === 'effective_schedule' ? 'effective_schedule' : 'fixed',
   rules: JSON.parse(localStorage.getItem('rules') || '{}')
 };
 
@@ -139,6 +141,7 @@ const loadingIndicatorEl = $('#loading-indicator');
 const statusFiltersEl = $('#status-filters');
 const centerFiltersEl = $('#center-filters');
 const hoursInputEl = $('#cfg-hours');
+const hoursModeEl = $('#cfg-hours-mode');
 const exportCsvBtn = $('#export-csv');
 const printViewBtn = $('#print-view');
 const primaryTabButtons = document.querySelectorAll('nav.view-tabs[data-role="primary"] .tab');
@@ -171,7 +174,7 @@ const DEFAULT_RULES = {
   centros: { gines:["(g)"], bormujos:["(b)"], privado:["(p)"] },
   pattern_sesion: FALLBACK_SESSION_REGEX.source,
   otros_excluir_totalmente: ["^g\s*:\s*\d+$","^b\s*:\s*\d+$","^ent\.\s*[bg]\s*:\s*\d+"],
-  bloques_horario: ["^[bg]\s*\d{1,2}$"],
+  bloques_horario: ["^(?:[bg]\s*\d{1,2}|(?:gines|bormujos)\s*\d{1,2})$"],
   otros_keywords: ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"],
   ausencias_descuentan: ["festivo","vacaciones","baja"],
   ausencias_justificadas: ["justificada","justificación","justif","justific"]
@@ -358,6 +361,23 @@ function resolveConfiguredWeekHours(){
   return WEEK_H;
 }
 
+function resolveHoursCalculationMode(){
+  if(cfg?.hoursCalculationMode === 'effective_schedule') return 'effective_schedule';
+  return 'fixed';
+}
+
+function updateHoursModeUI(){
+  const mode = resolveHoursCalculationMode();
+  if(hoursModeEl){
+    hoursModeEl.value = mode;
+  }
+  if(hoursInputEl){
+    const isFixed = mode === 'fixed';
+    hoursInputEl.disabled = !isFixed;
+    hoursInputEl.setAttribute('aria-disabled', isFixed ? 'false' : 'true');
+  }
+}
+
 function isAbsenceDiscountEvent(ev){
   const keywords = cfg.rules.ausencias_descuentan || [];
   if(!keywords.length) return false;
@@ -406,8 +426,55 @@ function calculateAbsenceReductionMinutes(events, range){
   return total;
 }
 
+function calculateEffectiveScheduleMinutes(events, range){
+  if(!range || !Array.isArray(events) || events.length === 0) return 0;
+  const rangeStart = range.start.getTime();
+  const rangeEnd = range.end.getTime();
+  if(!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd) || rangeEnd <= rangeStart){
+    return 0;
+  }
+
+  const intervals = [];
+  events.forEach((ev)=>{
+    if(isExcluirTotal(ev)) return;
+    if(!isBloqueHorario(ev)) return;
+    const start = new Date(ev.start?.dateTime || (ev.start?.date + 'T00:00:00'));
+    const end = new Date(ev.end?.dateTime || (ev.end?.date + 'T23:59:59'));
+    const startMs = start.getTime();
+    const endMs = end.getTime();
+    if(!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+    const clippedStart = Math.max(startMs, rangeStart);
+    const clippedEnd = Math.min(endMs, rangeEnd);
+    if(clippedEnd <= clippedStart) return;
+    intervals.push([clippedStart, clippedEnd]);
+  });
+
+  if(!intervals.length) return 0;
+  intervals.sort((a, b)=> a[0] - b[0]);
+
+  let totalMs = 0;
+  let [currentStart, currentEnd] = intervals[0];
+  for(let i = 1; i < intervals.length; i += 1){
+    const [start, end] = intervals[i];
+    if(start <= currentEnd){
+      currentEnd = Math.max(currentEnd, end);
+      continue;
+    }
+    totalMs += currentEnd - currentStart;
+    currentStart = start;
+    currentEnd = end;
+  }
+  totalMs += currentEnd - currentStart;
+  return Math.round(totalMs / 60000);
+}
+
 function minutesAvailableForRange(range, events){
   if(!range) return 0;
+  const mode = resolveHoursCalculationMode();
+  if(mode === 'effective_schedule'){
+    return calculateEffectiveScheduleMinutes(events, range);
+  }
+
   const ms = range.end - range.start;
   const day = 24 * 60 * 60 * 1000;
   const min = (h)=> Math.round(h * 60);
@@ -775,6 +842,7 @@ if(hoursInputEl){
   const roundedHours = trimTrailingZeros(cfg.hoursAvailable.toFixed(2));
   hoursInputEl.value = roundedHours || '0';
 }
+updateHoursModeUI();
 $('#rules-json').textContent = JSON.stringify(cfg.rules, null, 2);
 
 const initialWeekDate = storedWeekStartIso ? new Date(storedWeekStartIso) : new Date();
@@ -1787,16 +1855,30 @@ weekPicker?.addEventListener('change', (event)=>{
   if(date) setWeekFromDate(date);
 });
 
+hoursModeEl?.addEventListener('change', (event)=>{
+  const value = event.target.value === 'effective_schedule' ? 'effective_schedule' : 'fixed';
+  cfg.hoursCalculationMode = value;
+  updateHoursModeUI();
+});
+
 $('#save-cfg').addEventListener('click', ()=>{
-  const inputValue = Number(hoursInputEl?.value || 0);
-  const sanitizedHours = Number.isFinite(inputValue) && inputValue >= 0 ? inputValue : 0;
-  cfg.hoursAvailable = sanitizedHours;
-  cfg.minutesAvailable = Math.round(sanitizedHours * 60);
-  localStorage.setItem('hoursAvailable', String(sanitizedHours));
-  localStorage.setItem('minutesAvailable', String(cfg.minutesAvailable));
-  if(hoursInputEl){
-    hoursInputEl.value = trimTrailingZeros(sanitizedHours.toFixed(2));
+  const mode = hoursModeEl?.value === 'effective_schedule' ? 'effective_schedule' : 'fixed';
+  cfg.hoursCalculationMode = mode;
+  localStorage.setItem('hoursCalculationMode', mode);
+
+  if(mode === 'fixed'){
+    const inputValue = Number(hoursInputEl?.value || 0);
+    const sanitizedHours = Number.isFinite(inputValue) && inputValue >= 0 ? inputValue : 0;
+    cfg.hoursAvailable = sanitizedHours;
+    cfg.minutesAvailable = Math.round(sanitizedHours * 60);
+    localStorage.setItem('hoursAvailable', String(sanitizedHours));
+    localStorage.setItem('minutesAvailable', String(cfg.minutesAvailable));
+    if(hoursInputEl){
+      hoursInputEl.value = trimTrailingZeros(sanitizedHours.toFixed(2));
+    }
   }
+
+  updateHoursModeUI();
   if(processedWeekEvents.length){
     updateWeeklyStats(summarizeProcessedEvents(processedWeekEvents), rawWeekEvents);
   }
