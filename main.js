@@ -174,7 +174,7 @@ const DEFAULT_RULES = {
   centros: { gines:["(g)"], bormujos:["(b)"], privado:["(p)"] },
   pattern_sesion: FALLBACK_SESSION_REGEX.source,
   otros_excluir_totalmente: ["^g\s*:\s*\d+$","^b\s*:\s*\d+$","^ent\.\s*[bg]\s*:\s*\d+"],
-  bloques_horario: ["^(?:[bg]\s*\d{1,2}|(?:gines|bormujos)\s*\d{1,2})$"],
+  bloques_horario: ["^(?:(?:g|gin(?:e|é)?s?)|(?:b|bor(?:mujos)?))\s*(?:sala\s*)?\d{1,2}$"],
   otros_keywords: ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"],
   ausencias_descuentan: ["festivo","vacaciones","baja"],
   ausencias_justificadas: ["justificada","justificación","justif","justific"]
@@ -1047,7 +1047,7 @@ function isEffectiveScheduleBlock(ev){
   const title = (ev?.summary || '').trim();
   if(!title) return false;
   if(isBloqueHorario(ev)) return true;
-  return /^(?:[bg]\s*\d{1,3}|(?:gines|gin[eé]s|bormujos)\s*\d{1,3})$/i.test(title);
+  return /^(?:(?:g|gin(?:e|é)?s?)|(?:b|bor(?:mujos)?))\s*(?:sala\s*)?\d{1,3}$/i.test(title);
 }
 function isExcluirTotal(ev){
   const t = (ev.summary||'').trim();
