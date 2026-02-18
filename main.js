@@ -174,7 +174,7 @@ const DEFAULT_RULES = {
   centros: { gines:["(g)"], bormujos:["(b)"], privado:["(p)"] },
   pattern_sesion: FALLBACK_SESSION_REGEX.source,
   otros_excluir_totalmente: ["^g\s*:\s*\d+$","^b\s*:\s*\d+$","^ent\.\s*[bg]\s*:\s*\d+"],
-  bloques_horario: ["^(?:(?:g|gin(?:e|é)?s?)|(?:b|bor(?:mujos)?))\s*(?:sala\s*)?\d{1,2}$"],
+  bloques_horario: ["^(?:(?:g(?:in(?:e|é)?s?)?)|(?:b(?:or(?:mujos)?)?))[\\s._:-]*(?:sala[\\s._:-]*)?\\d{1,3}$"],
   otros_keywords: ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"],
   ausencias_descuentan: ["festivo","vacaciones","baja"],
   ausencias_justificadas: ["justificada","justificación","justif","justific"]
@@ -1038,16 +1038,31 @@ function sessionParse(ev){
     .trim();
   return {nh: nhText, nombre, centro: centroFallback, absent};
 }
+
+function normalizeScheduleBlockTitle(title=''){
+  return String(title)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function matchesUniversalScheduleBlock(title=''){
+  const normalized = normalizeScheduleBlockTitle(title);
+  if(!normalized) return false;
+  return /^(?:g(?:in(?:es)?)?|b(?:or(?:mujos)?)?)\s*(?:sala\s*)?\d{1,3}$/.test(normalized);
+}
+
 function isBloqueHorario(ev){
   const t = (ev.summary||'').trim();
-  return matchesAnyRegex(t, cfg.rules.bloques_horario||[]);
+  if(matchesAnyRegex(t, cfg.rules.bloques_horario||[])) return true;
+  return matchesUniversalScheduleBlock(t);
 }
 
 function isEffectiveScheduleBlock(ev){
-  const title = (ev?.summary || '').trim();
-  if(!title) return false;
-  if(isBloqueHorario(ev)) return true;
-  return /^(?:(?:g|gin(?:e|é)?s?)|(?:b|bor(?:mujos)?))\s*(?:sala\s*)?\d{1,3}$/i.test(title);
+  return isBloqueHorario(ev);
 }
 function isExcluirTotal(ev){
   const t = (ev.summary||'').trim();
