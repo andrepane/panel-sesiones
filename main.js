@@ -169,12 +169,16 @@ function setGcStatus(state){
 }
 
 const FALLBACK_SESSION_REGEX = /^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$/i;
+const CLASSIFICATION_UTILS = globalThis.ClassificationUtils || {};
+const normalizeTitle = CLASSIFICATION_UTILS.normalizeTitle || ((value)=> String(value || '').trim());
+const parseBloqueHorarioTitle = CLASSIFICATION_UTILS.parseBloqueHorarioTitle || (()=> null);
+const UNIVERSAL_BLOCK_PATTERN = CLASSIFICATION_UTILS.UNIVERSAL_BLOCK_PATTERN || '^(G|GIN|GINES|B|BORMUJOS)\\s*(?:SALA\\s*)?(\\d{1,2})$';
 
 const DEFAULT_RULES = {
   centros: { gines:["(g)"], bormujos:["(b)"], privado:["(p)"] },
   pattern_sesion: FALLBACK_SESSION_REGEX.source,
-  otros_excluir_totalmente: ["^g\s*:\s*\d+$","^b\s*:\s*\d+$","^ent\.\s*[bg]\s*:\s*\d+"],
-  bloques_horario: ["^(?:(?:g|gin(?:e|é)?s?)|(?:b|bor(?:mujos)?))\s*(?:sala\s*)?\d{1,2}$"],
+  otros_excluir_totalmente: ["^G\s*:?\s*\d+$","^B\s*:?\s*\d+$","^ENT\s*[BG]\s*:?\s*\d+$","^[BG]S\s*:?\s*\d+$"],
+  bloques_horario: [UNIVERSAL_BLOCK_PATTERN],
   otros_keywords: ["firma","comida","coordinación","reunión","formación","llamada","administrativo","battelle"],
   ausencias_descuentan: ["festivo","vacaciones","baja"],
   ausencias_justificadas: ["justificada","justificación","justif","justific"]
@@ -935,7 +939,7 @@ async function loadCalendars(){
 
 // ======== CLASIFICACIÓN ========
 function textFromEvent(ev){
-  return [ev.summary||'', ev.location||'', (ev.description||'')].join(' ').toLowerCase().trim();
+  return normalizeTitle([ev.summary||'', ev.location||'', (ev.description||'')].join(' '));
 }
 const REGEX_CACHE = new Map();
 
@@ -965,9 +969,9 @@ function matchesAnyRegex(text, regexList){
 }
 function detectCentroFromRules(text){
   const centros = cfg.rules.centros || {};
-  const lower = text.toLowerCase();
+  const normalizedText = normalizeTitle(text);
   for(const [centro, patterns] of Object.entries(centros)){
-    if(matchesAnyRegex(lower, patterns)) return centro;
+    if(matchesAnyRegex(normalizedText, patterns)) return centro;
   }
   return null;
 }
@@ -1038,24 +1042,25 @@ function sessionParse(ev){
     .trim();
   return {nh: nhText, nombre, centro: centroFallback, absent};
 }
+function parseBloqueHorarioEvent(ev){
+  const title = (ev.summary || '').trim();
+  const blockPattern = (cfg.rules.bloques_horario || [UNIVERSAL_BLOCK_PATTERN])[0] || UNIVERSAL_BLOCK_PATTERN;
+  return parseBloqueHorarioTitle(title, blockPattern);
+}
 function isBloqueHorario(ev){
-  const t = (ev.summary||'').trim();
-  return matchesAnyRegex(t, cfg.rules.bloques_horario||[]);
+  return Boolean(parseBloqueHorarioEvent(ev));
 }
 
 function isEffectiveScheduleBlock(ev){
-  const title = (ev?.summary || '').trim();
-  if(!title) return false;
-  if(isBloqueHorario(ev)) return true;
-  return /^(?:(?:g|gin(?:e|é)?s?)|(?:b|bor(?:mujos)?))\s*(?:sala\s*)?\d{1,3}$/i.test(title);
+  return isBloqueHorario(ev);
 }
 function isExcluirTotal(ev){
-  const t = (ev.summary||'').trim();
+  const t = normalizeTitle(ev.summary || '');
   return matchesAnyRegex(t, cfg.rules.otros_excluir_totalmente||[]);
 }
 function isOtroPorKeyword(ev){
   const t = textFromEvent(ev);
-  return (cfg.rules.otros_keywords||[]).some(k=> t.includes(k.toLowerCase()));
+  return (cfg.rules.otros_keywords||[]).some((k)=> t.includes(normalizeTitle(k)));
 }
 function durationMinutes(ev){
   const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
@@ -1229,6 +1234,7 @@ function analyzeEvent(ev, now = new Date(), discountDates = new Set()){
   let centroDisplay = '—';
   let privateAbsenceJustified = false;
   let privateAbsenceUnjustified = false;
+  let bloque = null;
   const dateKey = ev.start?.date ? ev.start.date : dateKeyFromDate(start);
   const isDiscountDay = dateKey ? discountDates.has(dateKey) : false;
 
@@ -1264,15 +1270,20 @@ function analyzeEvent(ev, now = new Date(), discountDates = new Set()){
     }else{
       estadoKey = 'en_curso';
     }
-  }else if(isBloqueHorario(ev)){
-    tipo = 'bloque';
-    estadoKey = 'otro';
-  }else if(isOtroPorKeyword(ev)){
-    tipo = 'otro';
-    estadoKey = 'otro';
   }else{
-    tipo = 'otro';
-    estadoKey = 'otro';
+    bloque = parseBloqueHorarioEvent(ev);
+    if(bloque){
+      tipo = 'bloque';
+      estadoKey = 'otro';
+      centroKey = bloque.centro;
+      centroDisplay = capitalize(bloque.centro);
+    }else if(isOtroPorKeyword(ev)){
+      tipo = 'otro';
+      estadoKey = 'otro';
+    }else{
+      tipo = 'otro';
+      estadoKey = 'otro';
+    }
   }
 
   return {
@@ -1291,6 +1302,7 @@ function analyzeEvent(ev, now = new Date(), discountDates = new Set()){
     isAllDay: Boolean(ev.start.date),
     privateAbsenceJustified,
     privateAbsenceUnjustified,
+    bloque,
   };
 }
 
