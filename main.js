@@ -171,7 +171,7 @@ function setGcStatus(state){
 const FALLBACK_SESSION_REGEX = /^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$/i;
 
 const DEFAULT_RULES = {
-  centros: { gines:["(g)"], bormujos:["(b)"], privado:["(p)"] },
+  centros: { gines:["\\(g\\)"], bormujos:["\\(b\\)"], privado:["\\(p\\)"] },
   pattern_sesion: FALLBACK_SESSION_REGEX.source,
   otros_excluir_totalmente: ["^g\s*:\s*\d+$","^b\s*:\s*\d+$","^ent\.\s*[bg]\s*:\s*\d+"],
   bloques_horario: ["^(?:(?:g(?:in(?:e|é)?s?)?)|(?:b(?:or(?:mujos)?)?))[\\s._:-]*(?:sala[\\s._:-]*)?\\d{1,3}$"],
@@ -963,7 +963,16 @@ function matchesPattern(text, pattern){
 function matchesAnyRegex(text, regexList){
   return (regexList||[]).some(p=> matchesPattern(text, p));
 }
+
+function detectCentroFromToken(text=''){
+  const match = String(text).match(/\(([bgp])\)/i);
+  if(!match) return null;
+  return centroFromLetra((match[1] || '').toUpperCase());
+}
+
 function detectCentroFromRules(text){
+  const byToken = detectCentroFromToken(text);
+  if(byToken) return byToken;
   const centros = cfg.rules.centros || {};
   const lower = text.toLowerCase();
   for(const [centro, patterns] of Object.entries(centros)){
