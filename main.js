@@ -150,6 +150,8 @@ const summaryTabButtons = document.querySelectorAll('.summary-tabs .tab');
 const summaryPanels = document.querySelectorAll('.kpi-panel');
 const quickReportBtn = $('#quick-report');
 const gcStatusEl = $('#gc-status');
+const toastContainerEl = $('#toast-container');
+const eventsCardsEl = $('#events-cards');
 const DEFAULT_VIEW = 'resumenes';
 let currentView = DEFAULT_VIEW;
 const SUMMARY_DEFAULT_VIEW = 'semana';
@@ -166,6 +168,34 @@ function setGcStatus(state){
   gcStatusEl.textContent = cfgEntry.text;
   gcStatusEl.classList.remove('ok','warn','muted');
   gcStatusEl.classList.add(cfgEntry.className);
+}
+
+function showToast({ title='Aviso', message='', type='info', duration=3800 }){
+  if(!toastContainerEl){
+    console.log(`${title}: ${message}`);
+    return;
+  }
+  const toast = document.createElement('article');
+  toast.className = `toast ${type}`;
+
+  const heading = document.createElement('h4');
+  heading.className = 'toast-title';
+  heading.textContent = title;
+
+  const content = document.createElement('p');
+  content.className = 'toast-message';
+  content.textContent = message;
+
+  toast.appendChild(heading);
+  toast.appendChild(content);
+  toastContainerEl.appendChild(toast);
+
+  const removeToast = ()=>{
+    if(toast.parentNode){
+      toast.parentNode.removeChild(toast);
+    }
+  };
+  window.setTimeout(removeToast, duration);
 }
 
 const FALLBACK_SESSION_REGEX = /^\*?\s*(\d{3,6})\s+(.+?)\s*\(([BGP])\)\s*$/i;
@@ -870,9 +900,10 @@ function initTokenClient(){
       if(resp && resp.access_token){
         accessToken = resp.access_token;
         setGcStatus('connected');
+        showToast({ title:'Google Calendar conectado', message:'Ya puedes consultar y filtrar tus sesiones.', type:'success' });
         loadCalendars();
       }else{
-        alert('No se obtuvo access_token');
+        showToast({ title:'Error de conexión', message:'No se obtuvo el token de acceso de Google.', type:'error' });
         setGcStatus('disconnected');
       }
     }
@@ -885,7 +916,7 @@ function requestGoogleAccessToken(attempt=0){
     return;
   }
   if(attempt > 10){
-    alert('No se pudo inicializar Google OAuth. Intenta de nuevo en unos segundos.');
+    showToast({ title:'No disponible', message:'No se pudo inicializar Google OAuth. Inténtalo de nuevo en unos segundos.', type:'error' });
     return;
   }
   initTokenClient();
@@ -926,7 +957,7 @@ async function loadCalendars(){
     if(calendars.length){ loadWeek(); }
   }catch(err){
     console.error(err);
-    alert('No se pudieron cargar los calendarios. Revisa la consola para más detalles.');
+    showToast({ title:'Error al cargar calendarios', message:'No se pudieron cargar tus calendarios. Revisa la consola para más detalles.', type:'error' });
     setGcStatus('disconnected');
   }finally{
     hideLoading();
@@ -1473,7 +1504,7 @@ async function loadWeek(){
   }catch(err){
     if(token === weekRequestToken){
       console.error(err);
-      alert('No se pudieron cargar los eventos de la semana. Revisa la consola para más detalles.');
+      showToast({ title:'Error al cargar la semana', message:'No se pudieron cargar los eventos de la semana. Revisa la consola para más detalles.', type:'error' });
       resetMonthSummary();
       resetYearSummary();
     }
@@ -1673,6 +1704,70 @@ function applyFilters(){
   filteredNarrativeCounters = buildNarrativeCounters(filtered);
   updateNarrativeCountersDisplay(filteredNarrativeCounters);
   renderTableRows(filtered);
+  renderMobileCards(filtered);
+}
+
+function renderMobileCards(list){
+  if(!eventsCardsEl) return;
+  eventsCardsEl.innerHTML = '';
+  if(!list.length){
+    const empty = document.createElement('article');
+    empty.className = 'event-card';
+    const text = document.createElement('p');
+    text.className = 'muted';
+    text.style.margin = '0';
+    text.textContent = 'No hay eventos que mostrar con los filtros actuales.';
+    empty.appendChild(text);
+    eventsCardsEl.appendChild(empty);
+    return;
+  }
+
+  list.forEach((item)=>{
+    const card = document.createElement('article');
+    card.className = 'event-card';
+
+    const header = document.createElement('div');
+    header.className = 'event-card-header';
+    const title = document.createElement('h3');
+    title.className = 'event-card-title';
+    title.textContent = item.title;
+    const status = document.createElement('span');
+    status.className = `pill ${item.estadoClass}`;
+    status.textContent = item.estadoLabel;
+    header.appendChild(title);
+    header.appendChild(status);
+
+    const centerWrap = document.createElement('div');
+    const center = document.createElement('span');
+    center.className = `pill ${item.centroClass}`;
+    center.textContent = item.centroLabel || '—';
+    centerWrap.appendChild(center);
+
+    const meta = document.createElement('div');
+    meta.className = 'event-card-meta';
+    const rows = [
+      ['Fecha', fmtDate(item.start)],
+      ['Horario', item.isAllDay ? 'Todo el día' : `${fmtTime(item.start)} - ${fmtTime(item.end)}`],
+      ['Tipo', capitalize(item.tipo)],
+      ['Duración', formatDuration(item.mins)]
+    ];
+    rows.forEach(([label, value])=>{
+      const metaItem = document.createElement('div');
+      const labelEl = document.createElement('p');
+      labelEl.className = 'muted';
+      labelEl.textContent = label;
+      const valueEl = document.createElement('strong');
+      valueEl.textContent = value;
+      metaItem.appendChild(labelEl);
+      metaItem.appendChild(valueEl);
+      meta.appendChild(metaItem);
+    });
+
+    card.appendChild(header);
+    card.appendChild(centerWrap);
+    card.appendChild(meta);
+    eventsCardsEl.appendChild(card);
+  });
 }
 
 function renderTableRows(list){
@@ -1760,7 +1855,7 @@ quickReportBtn?.addEventListener('click', ()=>{
   const view = currentSummaryView || SUMMARY_DEFAULT_VIEW;
   const report = buildQuickReport(view);
   if(report){
-    alert(report);
+    showToast({ title:'Informe rápido', message:report, type:'info', duration:5200 });
   }
 });
 
@@ -1788,7 +1883,7 @@ applyFilters();
 
 function exportWeekToCsv(){
   if(!filteredWeekEvents.length){
-    alert('No hay eventos para exportar con el filtro actual.');
+    showToast({ title:'Sin datos para exportar', message:'No hay eventos con el filtro actual.', type:'warning' });
     return;
   }
   const rows = [['Fecha','Inicio','Fin','Título','Centro','Estado','Tipo','Duración (h)']];
@@ -1816,6 +1911,7 @@ function exportWeekToCsv(){
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(link.href);
+  showToast({ title:'CSV exportado', message:`Se descargó el archivo ${link.download}.`, type:'success' });
 }
 
 function triggerPrintView(){
@@ -1873,7 +1969,13 @@ $('#refresh').addEventListener('click', ()=>{
     requestGoogleAccessToken();
   }
 });
-$('#load-week').addEventListener('click', ()=>{ if(!accessToken) return alert('Conéctate primero'); loadWeek(); });
+$('#load-week').addEventListener('click', ()=>{
+  if(!accessToken){
+    showToast({ title:'Conexión requerida', message:'Conéctate primero con Google Calendar.', type:'warning' });
+    return;
+  }
+  loadWeek();
+});
 $('#calendar-select')?.addEventListener('change', (event)=>{
   const value = event.target.value;
   if(value) localStorage.setItem('selectedCalendarId', value);
@@ -1930,7 +2032,7 @@ $('#save-rules').addEventListener('click', ()=>{
       try{
         new RegExp(json.pattern_sesion, 'i');
       }catch(err){
-        alert('Patrón inválido');
+        showToast({ title:'Regla inválida', message:'El patrón de sesión no es un regex válido.', type:'error' });
         return;
       }
     }
@@ -1938,8 +2040,10 @@ $('#save-rules').addEventListener('click', ()=>{
     localStorage.setItem('rules', JSON.stringify(json));
     SESSION_REGEX_CACHE.pattern = null;
     SESSION_REGEX_CACHE.regex = DEFAULT_SESSION_REGEX;
-    alert('Reglas guardadas. Recarga la semana para aplicar cambios.');
-  }catch(e){ alert('JSON inválido en las reglas'); }
+    showToast({ title:'Reglas guardadas', message:'Se guardaron tus reglas personalizadas.', type:'success' });
+  }catch(e){
+    showToast({ title:'JSON inválido', message:'Revisa el formato JSON en reglas personalizadas.', type:'error' });
+  }
 });
 
 $('#reset-rules').addEventListener('click', ()=>{
@@ -1948,7 +2052,7 @@ $('#reset-rules').addEventListener('click', ()=>{
   localStorage.removeItem('rules');
   SESSION_REGEX_CACHE.pattern = null;
   SESSION_REGEX_CACHE.regex = DEFAULT_SESSION_REGEX;
-  alert('Reglas restauradas. Recarga la semana para aplicar cambios.');
+  showToast({ title:'Reglas restauradas', message:'Se restauraron las reglas por defecto.', type:'info' });
 });
 
 // Silenciar errores causados por extensiones de navegador que cierran canales de mensaje
