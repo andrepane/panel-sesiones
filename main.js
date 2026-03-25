@@ -436,6 +436,7 @@ function calculateAbsenceReductionMinutes(events, range){
   let total = 0;
   events.forEach((ev)=>{
     if(isExcluirTotal(ev)) return;
+    if(isFullDay24HourEvent(ev)) return;
     if(!isAbsenceDiscountEvent(ev)) return;
     if(ev.start?.date){
       const keys = dateKeysFromRange(ev.start.date, ev.end?.date);
@@ -467,6 +468,7 @@ function calculateEffectiveScheduleMinutes(events, range){
   const intervals = [];
   events.forEach((ev)=>{
     if(isExcluirTotal(ev)) return;
+    if(isFullDay24HourEvent(ev)) return;
     if(!isEffectiveScheduleBlock(ev)) return;
     const start = new Date(ev.start?.dateTime || (ev.start?.date + 'T00:00:00'));
     const end = new Date(ev.end?.dateTime || (ev.end?.date + 'T23:59:59'));
@@ -1112,6 +1114,28 @@ function isOtroPorKeyword(ev){
   const t = textFromEvent(ev);
   return (cfg.rules.otros_keywords||[]).some(k=> t.includes(k.toLowerCase()));
 }
+
+function isFullDay24HourEvent(ev){
+  if(!ev?.start || !ev?.end) return false;
+  const fullDayMs = 24 * 60 * 60 * 1000;
+
+  if(ev.start.date && ev.end.date){
+    const start = parseDateInputValue(ev.start.date);
+    const end = parseDateInputValue(ev.end.date);
+    if(!start || !end) return false;
+    return (end.getTime() - start.getTime()) === fullDayMs;
+  }
+
+  if(ev.start.dateTime && ev.end.dateTime){
+    const start = new Date(ev.start.dateTime);
+    const end = new Date(ev.end.dateTime);
+    if(Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+    return (end.getTime() - start.getTime()) === fullDayMs;
+  }
+
+  return false;
+}
+
 function durationMinutes(ev){
   const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
   const end = new Date(ev.end.dateTime || (ev.end.date + 'T23:59:59'));
@@ -1162,6 +1186,7 @@ function getAbsenceDiscountDates(events){
   if(!Array.isArray(events)) return dates;
   events.forEach((ev)=>{
     if(isExcluirTotal(ev)) return;
+    if(isFullDay24HourEvent(ev)) return;
     if(!isAbsenceDiscountEvent(ev)) return;
     if(ev.start?.date){
       dateKeysFromRange(ev.start.date, ev.end?.date).forEach((key)=> dates.add(key));
@@ -1273,6 +1298,7 @@ function summarizeProcessedEvents(list){
 
 function analyzeEvent(ev, now = new Date(), discountDates = new Set()){
   if(isExcluirTotal(ev)) return null;
+  if(isFullDay24HourEvent(ev)) return null;
   const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
   const end = new Date(ev.end.dateTime || (ev.end.date + 'T23:59:59'));
   const mins = durationMinutes(ev);
