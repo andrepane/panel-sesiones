@@ -411,7 +411,8 @@ function updateHoursModeUI(){
 function isAbsenceDiscountEvent(ev){
   const keywords = cfg.rules.ausencias_descuentan || [];
   if(!keywords.length) return false;
-  return matchesAnyRegex(textFromEvent(ev), keywords);
+  const title = (ev.summary || '').toLowerCase().trim();
+  return matchesAnyRegex(title, keywords);
 }
 
 function isPrivateAbsenceJustified(ev){
