@@ -353,6 +353,32 @@ function dateKeyFromDate(date){
   return date.toLocaleDateString('sv-SE', { timeZone: TZ });
 }
 
+function weekdayFromDateKey(key){
+  const date = parseDateInputValue(key);
+  if(!date) return null;
+  return date.getDay();
+}
+
+function isWeekendDateKey(key){
+  const day = weekdayFromDateKey(key);
+  return day === 0 || day === 6;
+}
+
+function isWeekendDate(date){
+  const key = dateKeyFromDate(date);
+  return isWeekendDateKey(key);
+}
+
+function eventStartsOnWeekend(ev){
+  if(!ev?.start) return false;
+  if(ev.start.date){
+    return isWeekendDateKey(ev.start.date);
+  }
+  const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
+  if(Number.isNaN(start.getTime())) return false;
+  return isWeekendDate(start);
+}
+
 function dateKeysFromRange(startDate, endDate){
   if(!startDate) return [];
   const start = parseDateInputValue(startDate);
@@ -442,6 +468,7 @@ function calculateAbsenceReductionMinutes(events, range){
     if(ev.start?.date){
       const keys = dateKeysFromRange(ev.start.date, ev.end?.date);
       keys.forEach((key)=>{
+        if(isWeekendDateKey(key)) return;
         if(!isKeyInRange(key)) return;
         total += 24 * 60;
       });
@@ -450,6 +477,7 @@ function calculateAbsenceReductionMinutes(events, range){
     const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
     if(Number.isNaN(start.getTime())) return;
     const key = dateKeyFromDate(start);
+    if(isWeekendDateKey(key)) return;
     if(!isKeyInRange(key)) return;
     const mins = durationMinutes(ev);
     if(!Number.isFinite(mins) || mins <= 0) return;
@@ -470,6 +498,7 @@ function calculateEffectiveScheduleMinutes(events, range){
   events.forEach((ev)=>{
     if(isExcluirTotal(ev)) return;
     if(isFullDay24HourEvent(ev)) return;
+    if(eventStartsOnWeekend(ev)) return;
     if(!isEffectiveScheduleBlock(ev)) return;
     const start = new Date(ev.start?.dateTime || (ev.start?.date + 'T00:00:00'));
     const end = new Date(ev.end?.dateTime || (ev.end?.date + 'T23:59:59'));
@@ -1190,13 +1219,15 @@ function getAbsenceDiscountDates(events){
     if(isFullDay24HourEvent(ev)) return;
     if(!isAbsenceDiscountEvent(ev)) return;
     if(ev.start?.date){
-      dateKeysFromRange(ev.start.date, ev.end?.date).forEach((key)=> dates.add(key));
+      dateKeysFromRange(ev.start.date, ev.end?.date).forEach((key)=>{
+        if(!isWeekendDateKey(key)) dates.add(key);
+      });
       return;
     }
     const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
     if(Number.isNaN(start.getTime())) return;
     const key = dateKeyFromDate(start);
-    if(key) dates.add(key);
+    if(key && !isWeekendDateKey(key)) dates.add(key);
   });
   return dates;
 }
@@ -1300,6 +1331,7 @@ function summarizeProcessedEvents(list){
 function analyzeEvent(ev, now = new Date(), discountDates = new Set()){
   if(isExcluirTotal(ev)) return null;
   if(isFullDay24HourEvent(ev)) return null;
+  if(eventStartsOnWeekend(ev)) return null;
   const start = new Date(ev.start.dateTime || (ev.start.date + 'T00:00:00'));
   const end = new Date(ev.end.dateTime || (ev.end.date + 'T23:59:59'));
   const mins = durationMinutes(ev);
