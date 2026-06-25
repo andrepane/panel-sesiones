@@ -449,6 +449,11 @@ function isPrivateAbsenceJustified(ev){
   return matchesAnyRegex(text, keywords);
 }
 
+function isPrivatePatientVacationAbsence(ev){
+  const description = (ev.description || '').toLowerCase();
+  return description.includes('vacaciones');
+}
+
 function calculateAbsenceReductionMinutes(events, range){
   if(!range || !Array.isArray(events) || events.length === 0) return 0;
   const rangeStart = parseDateInputValue(formatDateInputValue(range.start));
@@ -1355,6 +1360,9 @@ function analyzeEvent(ev, now = new Date(), discountDates = new Set()){
       centroDisplay = capitalize(normalized);
     }else{
       centroDisplay = centroRaw && centroRaw !== '—' ? centroRaw : '—';
+    }
+    if(sp.absent && centroKey === 'privado' && isPrivatePatientVacationAbsence(ev)){
+      return null;
     }
     if(sp.absent && centroKey === 'privado'){
       if(isDiscountDay){
