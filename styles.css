@@ -630,6 +630,8 @@ tbody tr:hover { background:rgba(49,224,178,0.08); }
 .pill.yellow { background:rgba(250,204,21,0.18); color:#fef08a; }
 .pill.blue { background:rgba(56,189,248,0.2); color:#bae6fd; }
 .pill.gray { background:rgba(148,163,184,0.2); color:#e2e8f0; }
+.pill.teal { background:rgba(20,184,166,0.2); color:#99f6e4; border-color:rgba(45,212,191,0.28); }
+.legend-dot.teal { background:#2dd4bf; }
 
 .subtotal-row {
   background:rgba(29,209,161,0.12) !important;
