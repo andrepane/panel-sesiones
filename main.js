@@ -89,7 +89,6 @@ const storedWeekStartIso = localStorage.getItem('weekStartISO') || '';
 const weekPicker = $('#week-picker');
 const weekDadasEl = $('#stat-dadas');
 const weekAusenciasEl = $('#stat-ausencias');
-const weekProfessionalLeaveEl = $('#stat-permisos-profesionales');
 const weekProgramadasEl = $('#stat-programadas');
 const weekEnCursoEl = $('#stat-en-curso');
 const weekGinesEl = $('#stat-gines');
@@ -118,7 +117,6 @@ const weekHoursLabelEl = (()=>{
 if(weekHoursLabelEl){ weekHoursLabelEl.textContent = '—'; }
 const monthDadasEl = $('#stat-month-dadas');
 const monthAusenciasEl = $('#stat-month-ausencias');
-const monthProfessionalLeaveEl = $('#stat-month-permisos-profesionales');
 const monthPrivadoAbsEl = $('#stat-month-privado-abs');
 const monthProgramadasEl = $('#stat-month-programadas');
 const monthPctEl = $('#stat-month-pct');
@@ -131,7 +129,6 @@ const monthLabelEl = $('#month-label');
 const monthHoursLabelEl = $('#month-hours-label');
 const yearDadasEl = $('#stat-year-dadas');
 const yearAusenciasEl = $('#stat-year-ausencias');
-const yearProfessionalLeaveEl = $('#stat-year-permisos-profesionales');
 const yearPrivadoAbsEl = $('#stat-year-privado-abs');
 const yearProgramadasEl = $('#stat-year-programadas');
 const yearPctEl = $('#stat-year-pct');
@@ -838,7 +835,6 @@ function changeWeekBy(days){
 function resetMonthSummary(text='—'){
   monthDadasEl.textContent = '–';
   monthAusenciasEl.textContent = '–';
-  if(monthProfessionalLeaveEl) monthProfessionalLeaveEl.textContent = '–';
   if(monthPrivadoAbsEl) monthPrivadoAbsEl.textContent = '–';
   monthProgramadasEl.textContent = '–';
   if(monthTotalEl) monthTotalEl.textContent = '–';
@@ -858,7 +854,6 @@ function resetMonthSummary(text='—'){
 function setMonthSummaryLoading(range){
   monthDadasEl.textContent = '…';
   monthAusenciasEl.textContent = '…';
-  if(monthProfessionalLeaveEl) monthProfessionalLeaveEl.textContent = '…';
   if(monthPrivadoAbsEl) monthPrivadoAbsEl.textContent = '…';
   monthProgramadasEl.textContent = '…';
   if(monthTotalEl) monthTotalEl.textContent = '…';
@@ -878,7 +873,6 @@ function setMonthSummaryLoading(range){
 function resetYearSummary(text='—'){
   yearDadasEl.textContent = '–';
   yearAusenciasEl.textContent = '–';
-  if(yearProfessionalLeaveEl) yearProfessionalLeaveEl.textContent = '–';
   if(yearPrivadoAbsEl) yearPrivadoAbsEl.textContent = '–';
   yearProgramadasEl.textContent = '–';
   yearPctEl.textContent = '–';
@@ -895,7 +889,6 @@ function resetYearSummary(text='—'){
 function setYearSummaryLoading(range){
   yearDadasEl.textContent = '…';
   yearAusenciasEl.textContent = '…';
-  if(yearProfessionalLeaveEl) yearProfessionalLeaveEl.textContent = '…';
   if(yearPrivadoAbsEl) yearPrivadoAbsEl.textContent = '…';
   yearProgramadasEl.textContent = '…';
   yearPctEl.textContent = '…';
@@ -1464,7 +1457,6 @@ function renderMonthSummary(events, range){
 
   monthDadasEl.textContent = String(summary.dadas);
   monthAusenciasEl.textContent = String(summary.ausencias);
-  if(monthProfessionalLeaveEl) monthProfessionalLeaveEl.textContent = String(summary.permisosProfesionales);
   if(monthPrivadoAbsEl){
     monthPrivadoAbsEl.textContent = formatPrivateAbsenceSummary(summary);
   }
@@ -1502,7 +1494,6 @@ function renderYearSummary(events, range){
 
   yearDadasEl.textContent = String(summary.dadas);
   yearAusenciasEl.textContent = String(summary.ausencias);
-  if(yearProfessionalLeaveEl) yearProfessionalLeaveEl.textContent = String(summary.permisosProfesionales);
   if(yearPrivadoAbsEl){
     yearPrivadoAbsEl.textContent = formatPrivateAbsenceSummary(summary);
   }
@@ -1632,7 +1623,6 @@ function render(events){
 function updateWeeklyStats(summary, events){
   if(weekDadasEl) weekDadasEl.textContent = String(summary.dadas);
   if(weekAusenciasEl) weekAusenciasEl.textContent = String(summary.ausencias);
-  if(weekProfessionalLeaveEl) weekProfessionalLeaveEl.textContent = String(summary.permisosProfesionales);
   if(weekProgramadasEl) weekProgramadasEl.textContent = String(summary.programadas);
   if(weekEnCursoEl) weekEnCursoEl.textContent = `En curso: ${summary.enCurso}`;
   if(weekGinesEl) weekGinesEl.textContent = String(summary.gines);
@@ -1699,7 +1689,6 @@ function refreshStoredSummaries(){
 
     monthDadasEl.textContent = String(summary.dadas);
     monthAusenciasEl.textContent = String(summary.ausencias);
-    if(monthProfessionalLeaveEl) monthProfessionalLeaveEl.textContent = String(summary.permisosProfesionales);
     monthProgramadasEl.textContent = programadasTexto;
     monthPctEl.textContent = formatPercent(pct);
     updatePercentIndicator({
@@ -1730,7 +1719,6 @@ function refreshStoredSummaries(){
 
     yearDadasEl.textContent = String(summary.dadas);
     yearAusenciasEl.textContent = String(summary.ausencias);
-    if(yearProfessionalLeaveEl) yearProfessionalLeaveEl.textContent = String(summary.permisosProfesionales);
     yearProgramadasEl.textContent = programadasTexto;
     yearPctEl.textContent = formatPercent(pct);
     updatePercentIndicator({
@@ -1769,18 +1757,18 @@ function buildQuickReport(viewKey){
   const sanitizedView = viewKey || SUMMARY_DEFAULT_VIEW;
   switch(sanitizedView){
     case 'mes':{
-      const base = `Este mes llevas ${getTextContent(monthDadasEl)} sesiones (${getTextContent(monthPctEl)}), ${getTextContent(monthProgramadasEl)} programadas, ${getTextContent(monthAusenciasEl)} ausencias y ${getTextContent(monthProfessionalLeaveEl)} permisos profesionales.`;
+      const base = `Este mes llevas ${getTextContent(monthDadasEl)} sesiones (${getTextContent(monthPctEl)}), ${getTextContent(monthProgramadasEl)} programadas y ${getTextContent(monthAusenciasEl)} ausencias.`;
       const delta = formatDeltaForReport(monthPctEl, 'mes anterior');
       return `${base} ${delta}.`;
     }
     case 'ano':{
-      const base = `Este año llevas ${getTextContent(yearDadasEl)} sesiones (${getTextContent(yearPctEl)}), ${getTextContent(yearProgramadasEl)} programadas, ${getTextContent(yearAusenciasEl)} ausencias y ${getTextContent(yearProfessionalLeaveEl)} permisos profesionales.`;
+      const base = `Este año llevas ${getTextContent(yearDadasEl)} sesiones (${getTextContent(yearPctEl)}), ${getTextContent(yearProgramadasEl)} programadas y ${getTextContent(yearAusenciasEl)} ausencias.`;
       const delta = formatDeltaForReport(yearPctEl, 'año anterior');
       return `${base} ${delta}.`;
     }
     case 'semana':
     default:{
-      const base = `Esta semana llevas ${getTextContent(weekDadasEl)} sesiones (${getTextContent(weekPctEl)}), ${getTextContent(weekProgramadasEl)} programadas, ${getTextContent(weekAusenciasEl)} ausencias y ${getTextContent(weekProfessionalLeaveEl)} permisos profesionales.`;
+      const base = `Esta semana llevas ${getTextContent(weekDadasEl)} sesiones (${getTextContent(weekPctEl)}), ${getTextContent(weekProgramadasEl)} programadas y ${getTextContent(weekAusenciasEl)} ausencias.`;
       const delta = formatDeltaForReport(weekPctEl, 'semana anterior');
       return `${base} ${delta}.`;
     }
