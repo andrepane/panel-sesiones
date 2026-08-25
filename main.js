@@ -89,6 +89,7 @@ const storedWeekStartIso = localStorage.getItem('weekStartISO') || '';
 const weekPicker = $('#week-picker');
 const weekDadasEl = $('#stat-dadas');
 const weekAusenciasEl = $('#stat-ausencias');
+const weekProfessionalLeaveEl = $('#stat-permisos-profesionales');
 const weekProgramadasEl = $('#stat-programadas');
 const weekEnCursoEl = $('#stat-en-curso');
 const weekGinesEl = $('#stat-gines');
@@ -117,6 +118,7 @@ const weekHoursLabelEl = (()=>{
 if(weekHoursLabelEl){ weekHoursLabelEl.textContent = '—'; }
 const monthDadasEl = $('#stat-month-dadas');
 const monthAusenciasEl = $('#stat-month-ausencias');
+const monthProfessionalLeaveEl = $('#stat-month-permisos-profesionales');
 const monthPrivadoAbsEl = $('#stat-month-privado-abs');
 const monthProgramadasEl = $('#stat-month-programadas');
 const monthPctEl = $('#stat-month-pct');
@@ -129,6 +131,7 @@ const monthLabelEl = $('#month-label');
 const monthHoursLabelEl = $('#month-hours-label');
 const yearDadasEl = $('#stat-year-dadas');
 const yearAusenciasEl = $('#stat-year-ausencias');
+const yearProfessionalLeaveEl = $('#stat-year-permisos-profesionales');
 const yearPrivadoAbsEl = $('#stat-year-privado-abs');
 const yearProgramadasEl = $('#stat-year-programadas');
 const yearPctEl = $('#stat-year-pct');
@@ -223,10 +226,11 @@ const STATUS_FILTER_MAP = {
   dada: ['dada'],
   programada: ['programada', 'en_curso'],
   ausencia: ['ausencia'],
+  permiso_profesional: ['permiso_profesional'],
   otro: ['otro']
 };
 const CENTER_FILTER_KEYS = ['gines','bormujos','privado'];
-let activeStatusFilters = new Set(['dada','ausencia']);
+let activeStatusFilters = new Set(['dada','ausencia','permiso_profesional']);
 let activeCenterFilters = new Set(CENTER_FILTER_KEYS);
 let processedWeekEvents = [];
 let filteredWeekEvents = [];
@@ -834,6 +838,7 @@ function changeWeekBy(days){
 function resetMonthSummary(text='—'){
   monthDadasEl.textContent = '–';
   monthAusenciasEl.textContent = '–';
+  if(monthProfessionalLeaveEl) monthProfessionalLeaveEl.textContent = '–';
   if(monthPrivadoAbsEl) monthPrivadoAbsEl.textContent = '–';
   monthProgramadasEl.textContent = '–';
   if(monthTotalEl) monthTotalEl.textContent = '–';
@@ -853,6 +858,7 @@ function resetMonthSummary(text='—'){
 function setMonthSummaryLoading(range){
   monthDadasEl.textContent = '…';
   monthAusenciasEl.textContent = '…';
+  if(monthProfessionalLeaveEl) monthProfessionalLeaveEl.textContent = '…';
   if(monthPrivadoAbsEl) monthPrivadoAbsEl.textContent = '…';
   monthProgramadasEl.textContent = '…';
   if(monthTotalEl) monthTotalEl.textContent = '…';
@@ -872,6 +878,7 @@ function setMonthSummaryLoading(range){
 function resetYearSummary(text='—'){
   yearDadasEl.textContent = '–';
   yearAusenciasEl.textContent = '–';
+  if(yearProfessionalLeaveEl) yearProfessionalLeaveEl.textContent = '–';
   if(yearPrivadoAbsEl) yearPrivadoAbsEl.textContent = '–';
   yearProgramadasEl.textContent = '–';
   yearPctEl.textContent = '–';
@@ -888,6 +895,7 @@ function resetYearSummary(text='—'){
 function setYearSummaryLoading(range){
   yearDadasEl.textContent = '…';
   yearAusenciasEl.textContent = '…';
+  if(yearProfessionalLeaveEl) yearProfessionalLeaveEl.textContent = '…';
   if(yearPrivadoAbsEl) yearPrivadoAbsEl.textContent = '…';
   yearProgramadasEl.textContent = '…';
   yearPctEl.textContent = '…';
@@ -1154,12 +1162,9 @@ function isFullDay24HourEvent(ev){
   if(!ev?.start || !ev?.end) return false;
   const fullDayMs = 24 * 60 * 60 * 1000;
 
-  if(ev.start.date && ev.end.date){
-    const start = parseDateInputValue(ev.start.date);
-    const end = parseDateInputValue(ev.end.date);
-    if(!start || !end) return false;
-    return (end.getTime() - start.getTime()) === fullDayMs;
-  }
+  // Google representa cualquier evento de día completo con `date`, aunque
+  // abarque varios días. Todos ellos se ignoran como eventos operativos.
+  if(ev.start.date && ev.end.date) return true;
 
   if(ev.start.dateTime && ev.end.dateTime){
     const start = new Date(ev.start.dateTime);
@@ -1169,6 +1174,24 @@ function isFullDay24HourEvent(ev){
   }
 
   return false;
+}
+
+const PROFESSIONAL_LEAVE_MARKER_TITLE = 'permiso por matrimonio';
+
+function isProfessionalLeaveMarker(ev){
+  if(!ev?.start?.date || !ev?.end?.date) return false;
+  return String(ev.summary || '').trim().toLocaleLowerCase('es-ES') === PROFESSIONAL_LEAVE_MARKER_TITLE;
+}
+
+function getProfessionalLeaveDates(events){
+  const dates = new Set();
+  if(!Array.isArray(events)) return dates;
+  events.forEach((ev)=>{
+    if(!isProfessionalLeaveMarker(ev)) return;
+    // end.date es exclusivo en Google Calendar.
+    dateKeysFromRange(ev.start.date, ev.end.date).forEach((key)=> dates.add(key));
+  });
+  return dates;
 }
 
 function durationMinutes(ev){
@@ -1195,6 +1218,7 @@ function estadoLabelFromKey(key){
     case 'programada': return 'Programada';
     case 'en_curso': return 'En curso';
     case 'ausencia': return 'Ausencia';
+    case 'permiso_profesional': return 'Permiso profesional';
     default: return 'Otro';
   }
 }
@@ -1205,6 +1229,7 @@ function estadoPillClass(key){
     case 'programada': return 'yellow';
     case 'en_curso': return 'blue';
     case 'ausencia': return 'red';
+    case 'permiso_profesional': return 'teal';
     default: return 'gray';
   }
 }
@@ -1240,8 +1265,9 @@ function getAbsenceDiscountDates(events){
 function processEventsCollection(events, now = new Date()){
   const processed = [];
   const discountDates = getAbsenceDiscountDates(events);
+  const professionalLeaveDates = getProfessionalLeaveDates(events);
   events.forEach(ev=>{
-    const analyzed = analyzeEvent(ev, now, discountDates);
+    const analyzed = analyzeEvent(ev, now, discountDates, professionalLeaveDates);
     if(analyzed){ processed.push(analyzed); }
   });
   return processed;
@@ -1281,13 +1307,14 @@ function summarizeProcessedEvents(list){
     privado: 0,
     privadoAusenciasJustificadas: 0,
     privadoAusenciasNoJustificadas: 0,
+    permisosProfesionales: 0,
     totalMinutes: 0,
     scheduleMinutes: 0,
     sessionMinutes: 0,
     scheduledSessionMinutes: 0
   };
   list.forEach(item=>{
-    summary.totalMinutes += item.mins;
+    if(item.estadoKey !== 'permiso_profesional') summary.totalMinutes += item.mins;
     if(item.tipo === 'bloque'){
       summary.scheduleMinutes += item.mins;
     }
@@ -1316,6 +1343,9 @@ function summarizeProcessedEvents(list){
           summary.scheduledSessionMinutes += item.mins;
         }
         break;
+      case 'permiso_profesional':
+        summary.permisosProfesionales++;
+        break;
       default:
         summary.otros++;
     }
@@ -1326,14 +1356,14 @@ function summarizeProcessedEvents(list){
       summary.privadoAusenciasNoJustificadas++;
     }
   });
-  summary.totalEventos = summary.dadas + summary.ausencias + summary.programadas + summary.enCurso + summary.otros;
+  summary.totalEventos = summary.dadas + summary.ausencias + summary.programadas + summary.enCurso + summary.otros + summary.permisosProfesionales;
   summary.sessionHours = minutesToHours(summary.sessionMinutes);
   summary.totalHours = minutesToHours(summary.totalMinutes);
   summary.scheduleHours = minutesToHours(summary.scheduleMinutes);
   return summary;
 }
 
-function analyzeEvent(ev, now = new Date(), discountDates = new Set()){
+function analyzeEvent(ev, now = new Date(), discountDates = new Set(), professionalLeaveDates = new Set()){
   if(isExcluirTotal(ev)) return null;
   if(isFullDay24HourEvent(ev)) return null;
   if(eventStartsOnWeekend(ev)) return null;
@@ -1350,6 +1380,7 @@ function analyzeEvent(ev, now = new Date(), discountDates = new Set()){
   let privateAbsenceUnjustified = false;
   const dateKey = ev.start?.date ? ev.start.date : dateKeyFromDate(start);
   const isDiscountDay = dateKey ? discountDates.has(dateKey) : false;
+  const isProfessionalLeaveDay = dateKey ? professionalLeaveDates.has(dateKey) : false;
 
   if(sp){
     tipo = 'sesión';
@@ -1361,10 +1392,12 @@ function analyzeEvent(ev, now = new Date(), discountDates = new Set()){
     }else{
       centroDisplay = centroRaw && centroRaw !== '—' ? centroRaw : '—';
     }
-    if(sp.absent && centroKey === 'privado' && isPrivatePatientVacationAbsence(ev)){
+    if(sp.absent && isProfessionalLeaveDay){
+      estadoKey = 'permiso_profesional';
+    }else if(sp.absent && centroKey === 'privado' && isPrivatePatientVacationAbsence(ev)){
       return null;
     }
-    if(sp.absent && centroKey === 'privado'){
+    else if(sp.absent && centroKey === 'privado'){
       if(isDiscountDay){
         estadoKey = 'ausencia';
       }else{
@@ -1431,6 +1464,7 @@ function renderMonthSummary(events, range){
 
   monthDadasEl.textContent = String(summary.dadas);
   monthAusenciasEl.textContent = String(summary.ausencias);
+  if(monthProfessionalLeaveEl) monthProfessionalLeaveEl.textContent = String(summary.permisosProfesionales);
   if(monthPrivadoAbsEl){
     monthPrivadoAbsEl.textContent = formatPrivateAbsenceSummary(summary);
   }
@@ -1468,6 +1502,7 @@ function renderYearSummary(events, range){
 
   yearDadasEl.textContent = String(summary.dadas);
   yearAusenciasEl.textContent = String(summary.ausencias);
+  if(yearProfessionalLeaveEl) yearProfessionalLeaveEl.textContent = String(summary.permisosProfesionales);
   if(yearPrivadoAbsEl){
     yearPrivadoAbsEl.textContent = formatPrivateAbsenceSummary(summary);
   }
@@ -1597,6 +1632,7 @@ function render(events){
 function updateWeeklyStats(summary, events){
   if(weekDadasEl) weekDadasEl.textContent = String(summary.dadas);
   if(weekAusenciasEl) weekAusenciasEl.textContent = String(summary.ausencias);
+  if(weekProfessionalLeaveEl) weekProfessionalLeaveEl.textContent = String(summary.permisosProfesionales);
   if(weekProgramadasEl) weekProgramadasEl.textContent = String(summary.programadas);
   if(weekEnCursoEl) weekEnCursoEl.textContent = `En curso: ${summary.enCurso}`;
   if(weekGinesEl) weekGinesEl.textContent = String(summary.gines);
@@ -1663,6 +1699,7 @@ function refreshStoredSummaries(){
 
     monthDadasEl.textContent = String(summary.dadas);
     monthAusenciasEl.textContent = String(summary.ausencias);
+    if(monthProfessionalLeaveEl) monthProfessionalLeaveEl.textContent = String(summary.permisosProfesionales);
     monthProgramadasEl.textContent = programadasTexto;
     monthPctEl.textContent = formatPercent(pct);
     updatePercentIndicator({
@@ -1693,6 +1730,7 @@ function refreshStoredSummaries(){
 
     yearDadasEl.textContent = String(summary.dadas);
     yearAusenciasEl.textContent = String(summary.ausencias);
+    if(yearProfessionalLeaveEl) yearProfessionalLeaveEl.textContent = String(summary.permisosProfesionales);
     yearProgramadasEl.textContent = programadasTexto;
     yearPctEl.textContent = formatPercent(pct);
     updatePercentIndicator({
@@ -1731,18 +1769,18 @@ function buildQuickReport(viewKey){
   const sanitizedView = viewKey || SUMMARY_DEFAULT_VIEW;
   switch(sanitizedView){
     case 'mes':{
-      const base = `Este mes llevas ${getTextContent(monthDadasEl)} sesiones (${getTextContent(monthPctEl)}), ${getTextContent(monthProgramadasEl)} programadas y ${getTextContent(monthAusenciasEl)} ausencias.`;
+      const base = `Este mes llevas ${getTextContent(monthDadasEl)} sesiones (${getTextContent(monthPctEl)}), ${getTextContent(monthProgramadasEl)} programadas, ${getTextContent(monthAusenciasEl)} ausencias y ${getTextContent(monthProfessionalLeaveEl)} permisos profesionales.`;
       const delta = formatDeltaForReport(monthPctEl, 'mes anterior');
       return `${base} ${delta}.`;
     }
     case 'ano':{
-      const base = `Este año llevas ${getTextContent(yearDadasEl)} sesiones (${getTextContent(yearPctEl)}), ${getTextContent(yearProgramadasEl)} programadas y ${getTextContent(yearAusenciasEl)} ausencias.`;
+      const base = `Este año llevas ${getTextContent(yearDadasEl)} sesiones (${getTextContent(yearPctEl)}), ${getTextContent(yearProgramadasEl)} programadas, ${getTextContent(yearAusenciasEl)} ausencias y ${getTextContent(yearProfessionalLeaveEl)} permisos profesionales.`;
       const delta = formatDeltaForReport(yearPctEl, 'año anterior');
       return `${base} ${delta}.`;
     }
     case 'semana':
     default:{
-      const base = `Esta semana llevas ${getTextContent(weekDadasEl)} sesiones (${getTextContent(weekPctEl)}), ${getTextContent(weekProgramadasEl)} programadas y ${getTextContent(weekAusenciasEl)} ausencias.`;
+      const base = `Esta semana llevas ${getTextContent(weekDadasEl)} sesiones (${getTextContent(weekPctEl)}), ${getTextContent(weekProgramadasEl)} programadas, ${getTextContent(weekAusenciasEl)} ausencias y ${getTextContent(weekProfessionalLeaveEl)} permisos profesionales.`;
       const delta = formatDeltaForReport(weekPctEl, 'semana anterior');
       return `${base} ${delta}.`;
     }
@@ -1904,7 +1942,7 @@ function renderTableRows(list){
   cell2.colSpan = 2;
   cell2.textContent = `Dadas: ${subtotal.dadas} · Programadas: ${subtotal.programadas} · En curso: ${subtotal.enCurso}`;
   const cell3 = document.createElement('td');
-  cell3.textContent = `Ausencias: ${subtotal.ausencias}`;
+  cell3.textContent = `Ausencias: ${subtotal.ausencias} · Permisos profesionales: ${subtotal.permisosProfesionales}`;
   const cell4 = document.createElement('td');
   const subtotalSessionHours = formatHoursValue(subtotal.sessionHours);
   const subtotalTotalHours = formatHoursValue(subtotal.totalHours);

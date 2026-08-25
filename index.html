@@ -88,6 +88,10 @@
                   <span class="value" id="stat-ausencias">–</span>
                 </article>
                 <article class="stat">
+                  <span class="label">Permisos profesionales</span>
+                  <span class="value" id="stat-permisos-profesionales">–</span>
+                </article>
+                <article class="stat">
                   <span class="label">% sesiones impartidas</span>
                   <span class="value percent" id="stat-week-pct">–</span>
                   <span class="delta hidden" id="stat-week-delta"></span>
@@ -133,6 +137,10 @@
                   <span class="value" id="stat-month-ausencias">–</span>
                 </article>
                 <article class="stat">
+                  <span class="label">Permisos profesionales</span>
+                  <span class="value" id="stat-month-permisos-profesionales">–</span>
+                </article>
+                <article class="stat">
                   <span class="label">Privado ausencias (just. / no just.)</span>
                   <span class="value" id="stat-month-privado-abs">–</span>
                 </article>
@@ -173,6 +181,10 @@
                 <article class="stat">
                   <span class="label">Ausencias</span>
                   <span class="value" id="stat-year-ausencias">–</span>
+                </article>
+                <article class="stat">
+                  <span class="label">Permisos profesionales</span>
+                  <span class="value" id="stat-year-permisos-profesionales">–</span>
                 </article>
                 <article class="stat">
                   <span class="label">Privado ausencias (just. / no just.)</span>
@@ -224,6 +236,7 @@
                 <span class="legend-item"><span class="legend-dot yellow"></span>Programada</span>
                 <span class="legend-item"><span class="legend-dot blue"></span>En curso</span>
                 <span class="legend-item"><span class="legend-dot red"></span>Ausencia</span>
+                <span class="legend-item"><span class="legend-dot teal"></span>Permiso profesional</span>
                 <span class="legend-item"><span class="legend-dot gray"></span>Otros</span>
               </div>
             </div>
@@ -244,6 +257,7 @@
                 <button class="chip" data-key="dada">Dadas</button>
                 <button class="chip" data-key="programada">Programadas</button>
                 <button class="chip" data-key="ausencia">Ausencias</button>
+                <button class="chip" data-key="permiso_profesional">Permisos profesionales</button>
                 <button class="chip" data-key="otro">Otros</button>
               </div>
             </div>
@@ -327,6 +341,7 @@
                 <h3>Festivos, vacaciones y bajas</h3>
                 <p class="muted">Para descontar horas, crea un bloque en tu calendario con el nombre exacto <strong>festivo</strong>, <strong>vacaciones</strong> o <strong>baja</strong>.</p>
                 <p class="muted">Ese bloque debe tener exactamente el mismo horario que tu jornada laboral de ese día para que el descuento sea correcto.</p>
+                <p class="muted">Para un permiso profesional por matrimonio, crea un evento de día completo titulado exactamente <strong>Permiso por matrimonio</strong> y marca con <strong>*</strong> las sesiones no realizadas dentro de ese periodo.</p>
               </article>
               <article>
                 <h3>Horas de jornada</h3>
